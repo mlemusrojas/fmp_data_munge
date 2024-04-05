@@ -15,11 +15,9 @@ def make_df(data) -> pd.DataFrame:
     print(df.info())
     return df
 
-def create_lc_name(name: str, date: str | None, role: str, uri: str) -> str:
-    if date:
-        return f'{name}, {date}, {role} {uri}'
-    else:
-        return f'{name}, {role} {uri}'
+def create_lc_name(name: str | None, date: str | None, role: str | None, uri: str | None) -> str:
+    role_uri_merge = ' '.join([ i for i in [role, uri] if i])
+    return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
 # def create_lc_name_from_piped_fields(names: str, dates: str, roles: str, uris: str) -> str:
 #     names_list: list = names.split('|')
@@ -59,45 +57,59 @@ def create_lc_from_piped_fields(func, *args) -> str:
     return concatenated_lc_values
 
 def create_lc_date(start_date: str | None, end_date: str | None) -> str | None:
-    if end_date:
-        return f'{start_date}-{end_date}'
-    else:
-        return start_date
+    return ' - '.join([i for i in [start_date, end_date] if i])
     
-def validate_uri(uri: str, authority: str) -> bool:
+def build_uri(authority: str, id: str) -> str:
     auth_dict = {
-        'lc': 'http://id.loc.gov/authorities/',
+        'lc': 'http://id.loc.gov/authorities/names/',
         'viaf': 'http://viaf.org/viaf/'
     }
+    return f'{auth_dict[authority.lower()]}{id}'
 
-    if uri.startswith(auth_dict[authority.lower()]):
-        return True
-    else:
-        return False
+# def validate_uri(uri: str, authority: str) -> bool:
+#     auth_dict = {
+#         'lc': 'http://id.loc.gov/authorities/',
+#         'viaf': 'http://viaf.org/viaf/'
+#     }
+
+#     if uri.startswith(auth_dict[authority.lower()]):
+#         return True
+#     else:
+#         return False
     
-def return_valid_uri(uri: str, authority: str) -> str:
-    if validate_uri(uri, authority):
-        return uri
-    else:
-        raise ValueError(f'Invalid URI: {uri}')
+# def return_valid_uri(uri: str, authority: str) -> str:
+#     if validate_uri(uri, authority):
+#         return uri
+#     else:
+#         raise ValueError(f'Invalid URI: {uri}')
 
-def process_row(row: pd.Series, name_col: str, start_date_col: str, end_date_col: str, role_col: str, uri_col: str, authority_col: str, new_column_name: str) -> pd.Series:
-    lc_date = create_lc_from_piped_fields(create_lc_date, row[start_date_col], row[end_date_col])
-    valid_uri = create_lc_from_piped_fields(return_valid_uri, row[uri_col], row[authority_col])
+def process_row(row: pd.Series, 
+                name_col: str, 
+                role_col: str, 
+                authority_col: str, 
+                authority_id_col: str, 
+                new_column_name: str,
+                start_date_col: str | None = None, 
+                end_date_col: str | None = None
+                ) -> pd.Series:
+    
+    if start_date_col and end_date_col:
+        lc_date = create_lc_from_piped_fields(create_lc_date, row[start_date_col], row[end_date_col])
+    else:
+        lc_date = None
+    valid_uri = create_lc_from_piped_fields(build_uri, row[authority_col], row[authority_id_col])
     row[new_column_name] = create_lc_from_piped_fields(create_lc_name, row[name_col], lc_date, row[role_col], valid_uri)
     return row
 
 
 def add_lc_name_column(df: pd.DataFrame, 
                        name_col: str, 
-                       start_date_col: str, 
-                       end_date_col: str, 
                        role_col: str, 
-                       uri_col: str, 
                        authority_col: str, 
+                       authority_id_col: str, 
                        new_column_name: str
                        ) -> pd.DataFrame:
-    new_df = df.apply(process_row, args=(name_col, start_date_col, end_date_col, role_col, uri_col, authority_col, new_column_name), axis=1)
+    new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
     
         
@@ -120,7 +132,7 @@ def main():
     # roles = 'author|illustrator|editor'
     # uris = 'http://id.loc.gov/authorities/names/n79021383|http://id.loc.gov/authorities/names/n79021384|http://id.loc.gov/authorities/names/n79021385'
     # create_lc_name_from_piped_fields(names, dates, roles, uris)
-    new_df = add_lc_name_column(df, 'Authoritized Name', 'Start Date', 'End Date', 'role', 'uri', 'authority', 'lc_name')
+    new_df = add_lc_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', role_col='Position', new_column_name='namePersonOtherVIAF')
     print(new_df.head())
 
 if __name__ == '__main__':
