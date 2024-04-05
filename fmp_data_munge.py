@@ -25,7 +25,7 @@ def create_lc_name_from_piped_fields(names: str, dates: str, roles: str, uris: s
     uris_list: list = uris.split('|')
     
     lc_names = []
-    for name, date, role, uri in zip(names, dates, roles, uris):
+    for name, date, role, uri in zip(names_list, dates_list, roles_list, uris_list):
         lc_names.append(create_lc_name(name, date, role, uri))
     
     concatenated_lc_names = '|'.join(lc_names)
