@@ -1,7 +1,23 @@
-import sys
+import os,sys
 import argparse
 import csv
 import pandas as pd
+import logging
+
+##Set up logging
+
+# Get log level from environment variable, default to INFO
+log_level = os.getenv('LOG_LEVEL', 'INFO')
+numeric_level = getattr(logging, log_level.upper(), None)
+if not isinstance(numeric_level, int):
+    raise ValueError(f'Invalid log level: {log_level}')
+
+# Set up logging
+logging.basicConfig(level=numeric_level)
+
+# Log to a file
+log_file = '../fmp_data_munge.log'
+file_handler = logging.FileHandler(log_file)
 
 
 def read_csv(file_path: str) -> list[list[str]]:
@@ -207,7 +223,7 @@ def add_lc_name_column(df: pd.DataFrame,
     Returns:
         pd.DataFrame: The DataFrame with the new column added
     """
-    
+
     new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
     
