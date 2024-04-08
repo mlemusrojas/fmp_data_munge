@@ -3,21 +3,35 @@ import argparse
 import csv
 import pandas as pd
 import logging
+from dotenv import load_dotenv, find_dotenv
 
-##Set up logging
+load_dotenv(find_dotenv())
+LGLVL = os.environ['LOGLEVEL']
 
-# Get log level from environment variable, default to INFO
-log_level = os.getenv('LOG_LEVEL', 'INFO')
-numeric_level = getattr(logging, log_level.upper(), None)
-if not isinstance(numeric_level, int):
-    raise ValueError(f'Invalid log level: {log_level}')
+## set up logging ---------------------------------------------------
+lglvldct = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARN': logging.WARNING
+    }
+logging.basicConfig(
+    level=lglvldct[LGLVL],  # type: ignore -- assigns the level-object to the level-key loaded from the envar
+    format='[%(asctime)s] %(levelname)s [%(module)s-%(funcName)s()::%(lineno)d] %(message)s',
+    datefmt='%d/%b/%Y %H:%M:%S',
+    # encoding='utf-8',
+    filename='../fmp_data_munge.log',   
+    )
+log = logging.getLogger( __name__ )
+log.info( f'\n\n`log` logging working, using level, ``{LGLVL}``' )
 
-# Set up logging
-logging.basicConfig(level=numeric_level)
-
-# Log to a file
-log_file = '../fmp_data_munge.log'
-file_handler = logging.FileHandler(log_file)
+ch = logging.StreamHandler()    # ch stands for `Console Handler`
+ch.setLevel(logging.WARN)       # note: this level is _not_ the same as the file-handler level set in the `.env`
+ch.setFormatter( logging.Formatter(
+    '[%(asctime)s] %(levelname)s [%(module)s-%(funcName)s()::%(lineno)d] %(message)s',
+    datefmt='%d/%b/%Y %H:%M:%S',
+    )
+)
+log.addHandler(ch)
 
 
 def read_csv(file_path: str) -> list[list[str]]:
@@ -34,6 +48,7 @@ def read_csv(file_path: str) -> list[list[str]]:
     with open(file_path, 'r') as f:
         reader = csv.reader(f)
         data = [row for row in reader]
+        log.info(f'Read {len(data)} rows from {file_path}')
         return data
     
 def make_df(data: list[list[str]]) -> pd.DataFrame:
@@ -50,9 +65,10 @@ def make_df(data: list[list[str]]) -> pd.DataFrame:
 
     df = pd.DataFrame(data[1:], columns=data[0])
     print(df.info())
+    log.info(f'Created DataFrame with {len(df)} rows and {len(df.columns)} columns')
     return df
 
-def create_lc_name(name: str | None, date: str | None, role: str | None, uri: str | None) -> str:
+def create_lc_name(**fields) -> str:
     """
     Create a Library of Congress name from the name, date, role, and URI
     
@@ -65,37 +81,17 @@ def create_lc_name(name: str | None, date: str | None, role: str | None, uri: st
     Returns:
         str: The Library of Congress name
     """
-
+    log.debug(f'entering create_lc_name, ``{fields = }``')
+    name = fields.get('name', None)
+    date = fields.get('date', None)
+    role = fields.get('role', None)
+    uri = fields.get('uri', None)
+    
     role_uri_merge = ' '.join([ i for i in [role, uri] if i])
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
-# def create_lc_name_from_piped_fields(names: str, dates: str, roles: str, uris: str) -> str:
-#     names_list: list = names.split('|')
-#     dates_list: list = dates.split('|')
-#     roles_list: list = roles.split('|')
-#     uris_list: list = uris.split('|')
-    
-#     lc_names = []
-#     for name, date, role, uri in zip(names_list, dates_list, roles_list, uris_list):
-#         lc_names.append(create_lc_name(name, date, role, uri))
-    
-#     concatenated_lc_names = '|'.join(lc_names)
-#     print(concatenated_lc_names)
-#     return concatenated_lc_names
 
-# def create_lc_date_from_piped_fields(start_dates: str, end_dates: str) -> str:
-#     start_dates_list: list = start_dates.split('|')
-#     end_dates_list: list = end_dates.split('|')
-    
-#     lc_dates = []
-#     for start_date, end_date in zip(start_dates_list, end_dates_list):
-#         lc_dates.append(create_lc_date(start_date, end_date))
-    
-#     concatenated_lc_dates = '|'.join(lc_dates)
-#     print(concatenated_lc_dates)
-#     return concatenated_lc_dates
-
-def create_lc_from_piped_fields(func, *args) -> str:
+def create_lc_from_piped_fields(func, **kwargs) -> str | None:
     """
     Create a Library of Congress field from piped fields
 
@@ -106,13 +102,26 @@ def create_lc_from_piped_fields(func, *args) -> str:
     Returns:
         str: The Library of Congress field
     """
-    split_fields = [arg.split('|') for arg in args]
+
+    log.debug(f'entering create_lc_from_piped_fields, ``{func = }, {kwargs = }``')
+    split_fields = {k: v.split('|') for k, v in kwargs.items() if v is not None}
+    
+    log.debug(f'split_fields, ``{split_fields}``')
     
     lc_values = []
-    for values in zip(*split_fields):
-        lc_values.append(func(*values))
+    for values in zip(*split_fields.values()):
+        log.debug(f'values, ``{values}``')
+        lc_values.append(func(**dict(zip(split_fields.keys(), values))))
     
-    concatenated_lc_values = '|'.join(lc_values)
+    log.debug(f'lc_values, ``{lc_values}``')
+    if not lc_values:
+        log.debug(f'No LC values created, returning None')
+        return None
+    if not lc_values[0]:
+        log.debug(f'LC value is empty string or ``[None]``, returning None')
+        return None
+    log.debug(f'Concatenating LC values {lc_values = }')
+    concatenated_lc_values = '|'.join([i if i else '' for i in lc_values])
     print(concatenated_lc_values)
     return concatenated_lc_values
 
@@ -130,7 +139,7 @@ def create_lc_date(start_date: str | None, end_date: str | None) -> str | None:
 
     return ' - '.join([i for i in [start_date, end_date] if i])
     
-def build_uri(authority: str, id: str) -> str:
+def build_uri(authority: str | None, id: str | None) -> str | None:
     """
     Build a URI from an authority and an ID. The authority can be 'lc' or 'viaf'.
 
@@ -146,7 +155,17 @@ def build_uri(authority: str, id: str) -> str:
         'lc': 'http://id.loc.gov/authorities/names/',
         'viaf': 'http://viaf.org/viaf/'
     }
-    return f'{auth_dict[authority.lower()]}{id}'
+
+    if not authority:
+        log.debug(f'No authority provided: {authority = }, {id = }')
+        return None
+    if authority.lower() == 'local':
+        log.debug(f'Local authority provided: {authority = }, {id = }')
+        return None
+    uri = f'{auth_dict[authority.lower()]}{id}'
+    log.debug(f'Created URI: {uri}')
+
+    return uri
 
 # def validate_uri(uri: str, authority: str) -> bool:
 #     auth_dict = {
@@ -194,11 +213,17 @@ def process_row(row: pd.Series,
     """
 
     if start_date_col and end_date_col:
-        lc_date = create_lc_from_piped_fields(create_lc_date, row[start_date_col], row[end_date_col])
+        lc_date = create_lc_from_piped_fields(create_lc_date, start_date=row[start_date_col], end_date=row[end_date_col])
+        log.debug(f'Created LC date with create_lc_from_piped_fields: {lc_date}')
     else:
         lc_date = None
-    valid_uri = create_lc_from_piped_fields(build_uri, row[authority_col], row[authority_id_col])
-    row[new_column_name] = create_lc_from_piped_fields(create_lc_name, row[name_col], lc_date, row[role_col], valid_uri)
+        log.debug(f'No LC date created, start_date_col and/or end_date_col not provided: {start_date_col = }, {end_date_col = }')
+    valid_uri = create_lc_from_piped_fields(build_uri, authority=row[authority_col], id=row[authority_id_col])
+    log.debug(f'Created valid URI with create_lc_from_piped_fields: {valid_uri}')
+    row[new_column_name] = create_lc_from_piped_fields(create_lc_name, name=row[name_col], date=lc_date, role=row[role_col], uri=valid_uri)
+    log.debug(f'Created LC name with create_lc_from_piped_fields: {row[new_column_name]}')
+    log.debug(f'Processed row: {row}')
+    log.debug(f'Exiting process_row')
     return row
 
 
@@ -223,7 +248,7 @@ def add_lc_name_column(df: pd.DataFrame,
     Returns:
         pd.DataFrame: The DataFrame with the new column added
     """
-
+    log.debug(f'entering add_lc_name_column')
     new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
     
@@ -235,6 +260,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('file_path', help='Path to the CSV file to be read')
     args = parser.parse_args()
+    log.info(f'successfully parsed args, ``{args}``')
 
     # Read the CSV file
     data = read_csv(args.file_path)
@@ -249,6 +275,10 @@ def main():
     # create_lc_name_from_piped_fields(names, dates, roles, uris)
     new_df = add_lc_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', role_col='Position', new_column_name='namePersonOtherVIAF')
     print(new_df.head())
+    log.info(f'Finished processing DataFrame, writing to CSV')
+    if not os.path.exists('../output'):
+        os.makedirs('../output')
+    new_df.to_csv('../output/processed_data.csv', index=False)
 
 if __name__ == '__main__':
     main()
