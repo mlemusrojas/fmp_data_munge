@@ -4,18 +4,52 @@ import csv
 import pandas as pd
 
 
-def read_csv(file_path) -> list[list[str]]:
+def read_csv(file_path: str) -> list[list[str]]:
+    """
+    Read a CSV file and return the data as a list of lists
+
+    Args:
+        file_path (str): The path to the CSV file
+
+    Returns:
+        list[list[str]]: The data from the CSV file
+    """
+
     with open(file_path, 'r') as f:
         reader = csv.reader(f)
         data = [row for row in reader]
         return data
     
-def make_df(data) -> pd.DataFrame:
+def make_df(data: list[list[str]]) -> pd.DataFrame:
+    """
+    Create a pandas DataFrame from a list of lists
+    
+    Args:
+        data (list[list[str]]): The data to be converted to a DataFrame,
+            in the format created by the read_csv function
+        
+    Returns:
+        pd.DataFrame: The pandas DataFrame
+    """
+
     df = pd.DataFrame(data[1:], columns=data[0])
     print(df.info())
     return df
 
 def create_lc_name(name: str | None, date: str | None, role: str | None, uri: str | None) -> str:
+    """
+    Create a Library of Congress name from the name, date, role, and URI
+    
+    Args:
+        name (str): The name of the person
+        date (str): The date of the person
+        role (str): The role of the person
+        uri (str): The URI of the person
+        
+    Returns:
+        str: The Library of Congress name
+    """
+
     role_uri_merge = ' '.join([ i for i in [role, uri] if i])
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
@@ -46,6 +80,16 @@ def create_lc_name(name: str | None, date: str | None, role: str | None, uri: st
 #     return concatenated_lc_dates
 
 def create_lc_from_piped_fields(func, *args) -> str:
+    """
+    Create a Library of Congress field from piped fields
+
+    Args:
+        func: The function to apply to the piped fields
+        *args: The piped fields to process
+
+    Returns:
+        str: The Library of Congress field
+    """
     split_fields = [arg.split('|') for arg in args]
     
     lc_values = []
@@ -57,9 +101,31 @@ def create_lc_from_piped_fields(func, *args) -> str:
     return concatenated_lc_values
 
 def create_lc_date(start_date: str | None, end_date: str | None) -> str | None:
+    """
+    Create a Library of Congress date from the start and end dates
+
+    Args:
+        start_date (str): The start date
+        end_date (str): The end date
+    
+    Returns:
+        str: The Library of Congress date
+    """
+
     return ' - '.join([i for i in [start_date, end_date] if i])
     
 def build_uri(authority: str, id: str) -> str:
+    """
+    Build a URI from an authority and an ID. The authority can be 'lc' or 'viaf'.
+
+    Args:
+        authority (str): The authority
+        id (str): The ID
+
+    Returns:
+        str: The URI
+    """
+
     auth_dict = {
         'lc': 'http://id.loc.gov/authorities/names/',
         'viaf': 'http://viaf.org/viaf/'
@@ -92,7 +158,25 @@ def process_row(row: pd.Series,
                 start_date_col: str | None = None, 
                 end_date_col: str | None = None
                 ) -> pd.Series:
+    """
+    Process a row of a DataFrame to create a new column with a Library of Congress name
     
+    Args:
+        row (pd.Series): The row to process
+        name_col (str): The name of the column containing the name
+        role_col (str): The name of the column containing the role
+        authority_col (str): The name of the column containing the authority
+        authority_id_col (str): The name of the column containing the authority ID
+        new_column_name (str): The name of the new column to create
+        start_date_col (str): The name of the column containing the start date
+            start and end date columns are optional, but if one is provided, 
+            both must be provided
+        end_date_col (str): The name of the column containing the end date
+        
+    Returns:
+        pd.Series: The processed row
+    """
+
     if start_date_col and end_date_col:
         lc_date = create_lc_from_piped_fields(create_lc_date, row[start_date_col], row[end_date_col])
     else:
@@ -109,6 +193,21 @@ def add_lc_name_column(df: pd.DataFrame,
                        authority_id_col: str, 
                        new_column_name: str
                        ) -> pd.DataFrame:
+    """
+    Add a new column to a DataFrame with a Library of Congress name
+
+    Args:
+        df (pd.DataFrame): The DataFrame to process
+        name_col (str): The name of the column containing the name
+        role_col (str): The name of the column containing the role
+        authority_col (str): The name of the column containing the authority
+        authority_id_col (str): The name of the column containing the authority ID
+        new_column_name (str): The name of the new column to create
+
+    Returns:
+        pd.DataFrame: The DataFrame with the new column added
+    """
+    
     new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
     
