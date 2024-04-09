@@ -85,7 +85,7 @@ def create_authority_name(**fields) -> str:
     Returns:
         str: The formatted name
     """
-    log.debug(f'entering create_lc_name, ``{fields = }``')
+    log.debug(f'entering create_authority_name, ``{fields = }``')
     name = fields.get('name', None)
     date = fields.get('date', None)
     role = fields.get('role', None)
@@ -116,22 +116,22 @@ def create_authority_from_piped_fields(func, **kwargs) -> str | None:
     
     log.debug(f'{split_fields = }')
     
-    lc_values = []
+    authority_values = []
     for values in zip(*split_fields.values()):
         log.debug(f'values, ``{values}``')
-        lc_values.append(func(**dict(zip(split_fields.keys(), values))))
+        authority_values.append(func(**dict(zip(split_fields.keys(), values))))
     
-    log.debug(f'{lc_values = }')
-    if not lc_values:
-        log.debug(f'No LC values created, returning None')
+    log.debug(f'{authority_values = }')
+    if not authority_values:
+        log.debug(f'No Authority values created, returning None')
         return None
-    if not lc_values[0]:
-        log.debug(f'LC value is empty string or ``[None]``, returning None')
+    if not authority_values[0]:
+        log.debug(f'Authority value is empty string or ``[None]``, returning None')
         return None
-    log.debug(f'Concatenating LC values {lc_values = }')
-    concatenated_lc_values = '|'.join([i if i else '' for i in lc_values])
-    print(concatenated_lc_values)
-    return concatenated_lc_values
+    log.debug(f'Concatenating Authority values {authority_values = }')
+    concatenated_authority_values = '|'.join([i if i else '' for i in authority_values])
+    print(concatenated_authority_values)
+    return concatenated_authority_values
 
 def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None:
     """
@@ -222,14 +222,14 @@ def process_row(row: pd.Series,
     """
 
     if start_date_col and end_date_col:
-        lc_date = create_authority_from_piped_fields(create_formatted_date, start_date=row[start_date_col], end_date=row[end_date_col])
-        log.debug(f'Created date with create_formatted_date: {lc_date}')
+        formatted_date = create_authority_from_piped_fields(create_formatted_date, start_date=row[start_date_col], end_date=row[end_date_col])
+        log.debug(f'Created date with create_formatted_date: {formatted_date}')
     else:
-        lc_date = None
+        formatted_date = None
         log.debug(f'No date created, start_date_col and/or end_date_col not provided: {start_date_col = }, {end_date_col = }')
     valid_uri = create_authority_from_piped_fields(build_uri, authority=row[authority_col], id=row[authority_id_col])
     log.debug(f'Created URI with build_uri: {valid_uri}')
-    row[new_column_name] = create_authority_from_piped_fields(create_authority_name, name=row[name_col], date=lc_date, role=row[role_col], uri=valid_uri)
+    row[new_column_name] = create_authority_from_piped_fields(create_authority_name, name=row[name_col], date=formatted_date, role=row[role_col], uri=valid_uri)
     log.debug(f'Created name with create_authority_name: {row[new_column_name]}')
     log.debug(f'Processed row: {row}')
     log.debug(f'Exiting process_row')
@@ -257,7 +257,7 @@ def add_authority_name_column(df: pd.DataFrame,
     Returns:
         pd.DataFrame: The DataFrame with the new column added
     """
-    
+
     log.debug(f'entering add_authority_name_column')
     new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
