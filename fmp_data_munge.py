@@ -68,9 +68,13 @@ def make_df(data: list[list[str]]) -> pd.DataFrame:
     log.info(f'Created DataFrame with {len(df)} rows and {len(df.columns)} columns')
     return df
 
-def create_lc_name(**fields) -> str:
+def create_authority_name(**fields) -> str:
     """
-    Create a Library of Congress name from the name, date, role, and URI
+    Create an 'authority' name from the name, date, role, and URI
+
+    Example:
+        input: 'Smith, John', '1970', 'author', 'http://id.loc.gov/authorities/names/n79021383'
+        output: 'Smith, John, 1970, author http://id.loc.gov/authorities/names/n79021383'
     
     Args:
         name (str): The name of the person
@@ -79,7 +83,7 @@ def create_lc_name(**fields) -> str:
         uri (str): The URI of the person
         
     Returns:
-        str: The Library of Congress name
+        str: The formatted name
     """
     log.debug(f'entering create_lc_name, ``{fields = }``')
     name = fields.get('name', None)
@@ -91,29 +95,33 @@ def create_lc_name(**fields) -> str:
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
 
-def create_lc_from_piped_fields(func, **kwargs) -> str | None:
+def create_authority_from_piped_fields(func, **kwargs) -> str | None:
     """
-    Create a Library of Congress field from piped fields
+    Create an 'authority' formatted field from piped fields
 
+    Example: 
+        input: 'Smith, John|Doe Jane', '1970|1980', 'author|illustrator', 'uri1|uri2'
+        output: 'Smith, John, 1970, author uri1|Doe Jane, 1980, illustrator, uri2'
+    
     Args:
         func: The function to apply to the piped fields
         *args: The piped fields to process
 
     Returns:
-        str: The Library of Congress field
+        str: The formatted field
     """
 
-    log.debug(f'entering create_lc_from_piped_fields, ``{func = }, {kwargs = }``')
+    log.debug(f'entering create_authority_from_piped_fields, ``{func = }, {kwargs = }``')
     split_fields = {k: v.split('|') for k, v in kwargs.items() if v is not None}
     
-    log.debug(f'split_fields, ``{split_fields}``')
+    log.debug(f'{split_fields = }')
     
     lc_values = []
     for values in zip(*split_fields.values()):
         log.debug(f'values, ``{values}``')
         lc_values.append(func(**dict(zip(split_fields.keys(), values))))
     
-    log.debug(f'lc_values, ``{lc_values}``')
+    log.debug(f'{lc_values = }')
     if not lc_values:
         log.debug(f'No LC values created, returning None')
         return None
@@ -125,23 +133,24 @@ def create_lc_from_piped_fields(func, **kwargs) -> str | None:
     print(concatenated_lc_values)
     return concatenated_lc_values
 
-def create_lc_date(start_date: str | None, end_date: str | None) -> str | None:
+def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None:
     """
-    Create a Library of Congress date from the start and end dates
+    Create a date range in 'YYYY - YYYY' format from a start date and an end date,
+    or a single date if only one is provided
 
     Args:
         start_date (str): The start date
         end_date (str): The end date
     
     Returns:
-        str: The Library of Congress date
+        str: The formatted date (range)
     """
 
     return ' - '.join([i for i in [start_date, end_date] if i])
     
 def build_uri(authority: str | None, id: str | None) -> str | None:
     """
-    Build a URI from an authority and an ID. The authority can be 'lc' or 'viaf'.
+    Build a URI from an authority and an ID. The authority can be 'lc', 'viaf', or local. If local, returns None.
 
     Args:
         authority (str): The authority
@@ -194,7 +203,7 @@ def process_row(row: pd.Series,
                 end_date_col: str | None = None
                 ) -> pd.Series:
     """
-    Process a row of a DataFrame to create a new column with a Library of Congress name
+    Process a row of a DataFrame to create a new column with a formatted name
     
     Args:
         row (pd.Series): The row to process
@@ -213,21 +222,21 @@ def process_row(row: pd.Series,
     """
 
     if start_date_col and end_date_col:
-        lc_date = create_lc_from_piped_fields(create_lc_date, start_date=row[start_date_col], end_date=row[end_date_col])
-        log.debug(f'Created LC date with create_lc_from_piped_fields: {lc_date}')
+        lc_date = create_authority_from_piped_fields(create_formatted_date, start_date=row[start_date_col], end_date=row[end_date_col])
+        log.debug(f'Created date with create_formatted_date: {lc_date}')
     else:
         lc_date = None
-        log.debug(f'No LC date created, start_date_col and/or end_date_col not provided: {start_date_col = }, {end_date_col = }')
-    valid_uri = create_lc_from_piped_fields(build_uri, authority=row[authority_col], id=row[authority_id_col])
-    log.debug(f'Created valid URI with create_lc_from_piped_fields: {valid_uri}')
-    row[new_column_name] = create_lc_from_piped_fields(create_lc_name, name=row[name_col], date=lc_date, role=row[role_col], uri=valid_uri)
-    log.debug(f'Created LC name with create_lc_from_piped_fields: {row[new_column_name]}')
+        log.debug(f'No date created, start_date_col and/or end_date_col not provided: {start_date_col = }, {end_date_col = }')
+    valid_uri = create_authority_from_piped_fields(build_uri, authority=row[authority_col], id=row[authority_id_col])
+    log.debug(f'Created URI with build_uri: {valid_uri}')
+    row[new_column_name] = create_authority_from_piped_fields(create_authority_name, name=row[name_col], date=lc_date, role=row[role_col], uri=valid_uri)
+    log.debug(f'Created name with create_authority_name: {row[new_column_name]}')
     log.debug(f'Processed row: {row}')
     log.debug(f'Exiting process_row')
     return row
 
 
-def add_lc_name_column(df: pd.DataFrame, 
+def add_authority_name_column(df: pd.DataFrame, 
                        name_col: str, 
                        role_col: str, 
                        authority_col: str, 
@@ -235,7 +244,7 @@ def add_lc_name_column(df: pd.DataFrame,
                        new_column_name: str
                        ) -> pd.DataFrame:
     """
-    Add a new column to a DataFrame with a Library of Congress name
+    Add a new column to a DataFrame with a name in the required format: 'Last, First, Dates, Role URI'
 
     Args:
         df (pd.DataFrame): The DataFrame to process
@@ -248,7 +257,8 @@ def add_lc_name_column(df: pd.DataFrame,
     Returns:
         pd.DataFrame: The DataFrame with the new column added
     """
-    log.debug(f'entering add_lc_name_column')
+    
+    log.debug(f'entering add_authority_name_column')
     new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
     return new_df
     
@@ -273,7 +283,7 @@ def main():
     # roles = 'author|illustrator|editor'
     # uris = 'http://id.loc.gov/authorities/names/n79021383|http://id.loc.gov/authorities/names/n79021384|http://id.loc.gov/authorities/names/n79021385'
     # create_lc_name_from_piped_fields(names, dates, roles, uris)
-    new_df = add_lc_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', role_col='Position', new_column_name='namePersonOtherVIAF')
+    new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', role_col='Position', new_column_name='namePersonOtherVIAF')
     print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
     if not os.path.exists('../output'):
