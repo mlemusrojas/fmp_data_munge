@@ -13,24 +13,24 @@ lglvldct = {
     'DEBUG': logging.DEBUG,
     'INFO': logging.INFO,
     'WARN': logging.WARNING
-    }
+}
 logging.basicConfig(
     level=lglvldct[LGLVL],  # type: ignore -- assigns the level-object to the level-key loaded from the envar
     format='[%(asctime)s] %(levelname)s [%(module)s-%(funcName)s()::%(lineno)d] %(message)s',
     datefmt='%d/%b/%Y %H:%M:%S',
     # encoding='utf-8',
-    filename='../fmp_data_munge.log',   
-    )
-log = logging.getLogger( __name__ )
-log.info( f'\n\n`log` logging working, using level, ``{LGLVL}``' )
+    filename='../fmp_data_munge.log',
+    filemode='w'  # Set filemode to 'w' to overwrite the existing log file
+)
+log = logging.getLogger(__name__)
+log.info(f'\n\n`log` logging working, using level, ``{LGLVL}``')
 
-ch = logging.StreamHandler()    # ch stands for `Console Handler`
-ch.setLevel(logging.WARN)       # note: this level is _not_ the same as the file-handler level set in the `.env`
-ch.setFormatter( logging.Formatter(
+ch = logging.StreamHandler()  # ch stands for `Console Handler`
+ch.setLevel(logging.WARN)  # note: this level is _not_ the same as the file-handler level set in the `.env`
+ch.setFormatter(logging.Formatter(
     '[%(asctime)s] %(levelname)s [%(module)s-%(funcName)s()::%(lineno)d] %(message)s',
     datefmt='%d/%b/%Y %H:%M:%S',
-    )
-)
+))
 log.addHandler(ch)
 
 
@@ -193,11 +193,30 @@ def build_uri(authority: str | None, id: str | None) -> str | None:
 #     else:
 #         raise ValueError(f'Invalid URI: {uri}')
 
+def reduce_list(values: str, flags: list[bool]) -> str:
+    """
+    Reduce a list of values based on a list of boolean flags
+
+    Example:
+        input: 'a|b|c', [True, False, True]
+        output: 'a|c'
+    
+    Args:
+        values str: The pipe-separated list of values
+        flags (list[bool]): The flags to reduce by
+        
+    Returns:
+        str: The reduced list of values
+    """
+
+    return '|'.join([value for value, flag in zip(values.split('|'), flags) if flag])
+
 def process_row(row: pd.Series, 
                 name_col: str, 
                 role_col: str, 
                 authority_col: str, 
-                authority_id_col: str, 
+                authority_id_col: str,
+                authority: str, 
                 new_column_name: str,
                 start_date_col: str | None = None, 
                 end_date_col: str | None = None
@@ -211,6 +230,7 @@ def process_row(row: pd.Series,
         role_col (str): The name of the column containing the role
         authority_col (str): The name of the column containing the authority
         authority_id_col (str): The name of the column containing the authority ID
+        authority (str): The authority to filter on
         new_column_name (str): The name of the new column to create
         start_date_col (str): The name of the column containing the start date
             start and end date columns are optional, but if one is provided, 
@@ -221,15 +241,38 @@ def process_row(row: pd.Series,
         pd.Series: The processed row
     """
 
+    # track the indices to process based on the authority
+    log.debug(f'entering process_row')
+    log.debug(f'Processing row: {row}')
+    log.debug(f'{authority = }')
+    log.debug(f'{row[authority_col] = }')
+    values_to_process: list[bool] = [True if i.lower() == authority.lower() else False for i in row[authority_col].split('|')]
+    log.debug(f'{values_to_process = }')
+
     if start_date_col and end_date_col:
-        formatted_date = create_authority_from_piped_fields(create_formatted_date, start_date=row[start_date_col], end_date=row[end_date_col])
-        log.debug(f'Created date with create_formatted_date: {formatted_date}')
+        kept_start_dates = reduce_list(row[start_date_col], values_to_process)
+        log.debug(f'{kept_start_dates = }')
+        kept_end_dates = reduce_list(row[end_date_col], values_to_process)
+        log.debug(f'{kept_end_dates = }')
+        formatted_dates = create_authority_from_piped_fields(create_formatted_date, start_date=kept_start_dates, end_date=kept_end_dates)
+        log.debug(f'Created date with create_formatted_date: {formatted_dates}')
     else:
-        formatted_date = None
+        formatted_dates = None
         log.debug(f'No date created, start_date_col and/or end_date_col not provided: {start_date_col = }, {end_date_col = }')
-    valid_uri = create_authority_from_piped_fields(build_uri, authority=row[authority_col], id=row[authority_id_col])
-    log.debug(f'Created URI with build_uri: {valid_uri}')
-    row[new_column_name] = create_authority_from_piped_fields(create_authority_name, name=row[name_col], date=formatted_date, role=row[role_col], uri=valid_uri)
+
+    kept_authorities = reduce_list(row[authority_col], values_to_process)
+    log.debug(f'{kept_authorities = }')
+    kept_ids = reduce_list(row[authority_id_col], values_to_process)
+    log.debug(f'{kept_ids = }')
+    valid_uris = create_authority_from_piped_fields(build_uri, authority=kept_authorities, id=kept_ids)
+    log.debug(f'Created URI with build_uri: {valid_uris}')
+
+    kept_names = reduce_list(row[name_col], values_to_process)
+    log.debug(f'{kept_names = }')
+    kept_roles = reduce_list(row[role_col], values_to_process)
+    log.debug(f'{kept_roles = }')
+
+    row[new_column_name] = create_authority_from_piped_fields(create_authority_name, name=kept_names, date=formatted_dates, role=kept_roles, uri=valid_uris)
     log.debug(f'Created name with create_authority_name: {row[new_column_name]}')
     log.debug(f'Processed row: {row}')
     log.debug(f'Exiting process_row')
@@ -239,7 +282,8 @@ def process_row(row: pd.Series,
 def add_authority_name_column(df: pd.DataFrame, 
                        name_col: str, 
                        role_col: str, 
-                       authority_col: str, 
+                       authority_col: str,
+                       authority: str, 
                        authority_id_col: str, 
                        new_column_name: str
                        ) -> pd.DataFrame:
@@ -251,6 +295,7 @@ def add_authority_name_column(df: pd.DataFrame,
         name_col (str): The name of the column containing the name
         role_col (str): The name of the column containing the role
         authority_col (str): The name of the column containing the authority
+        authority (str): The authority to filter on
         authority_id_col (str): The name of the column containing the authority ID
         new_column_name (str): The name of the new column to create
 
@@ -259,7 +304,7 @@ def add_authority_name_column(df: pd.DataFrame,
     """
 
     log.debug(f'entering add_authority_name_column')
-    new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, new_column_name), axis=1)
+    new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, authority, new_column_name), axis=1)
     return new_df
     
         
@@ -283,7 +328,7 @@ def main():
     # roles = 'author|illustrator|editor'
     # uris = 'http://id.loc.gov/authorities/names/n79021383|http://id.loc.gov/authorities/names/n79021384|http://id.loc.gov/authorities/names/n79021385'
     # create_lc_name_from_piped_fields(names, dates, roles, uris)
-    new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', role_col='Position', new_column_name='namePersonOtherVIAF')
+    new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='viaf', role_col='Position', new_column_name='namePersonOtherVIAF')
     print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
     if not os.path.exists('../output'):
