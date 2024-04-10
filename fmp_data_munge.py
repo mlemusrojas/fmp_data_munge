@@ -211,7 +211,7 @@ def reduce_list(values: str, flags: list[bool]) -> str:
 
     return '|'.join([value for value, flag in zip(values.split('|'), flags) if flag])
 
-def process_row(row: pd.Series, 
+def process_row_alpha(row: pd.Series, 
                 name_col: str, 
                 role_col: str, 
                 authority_col: str, 
@@ -222,7 +222,12 @@ def process_row(row: pd.Series,
                 end_date_col: str | None = None
                 ) -> pd.Series:
     """
-    Process a row of a DataFrame to create a new column with a formatted name
+    Process a row of a DataFrame to create a new column with a formatted name.
+    
+    Appropriate when the output matches:
+    
+      A:  {Name}, {Role} {Authority URI} or
+      B:  {Name}, {Start Date} - {End Date}, {Role} {Authority URI}
     
     Args:
         row (pd.Series): The row to process
@@ -240,10 +245,10 @@ def process_row(row: pd.Series,
     Returns:
         pd.Series: The processed row
     """
-
-    # track the indices to process based on the authority
     log.debug(f'entering process_row')
     log.debug(f'Processing row: {row}')
+
+    # track the indices to process based on the authority
     log.debug(f'{authority = }')
     log.debug(f'{row[authority_col] = }')
     values_to_process: list[bool] = [True if i.lower() == authority.lower() else False for i in row[authority_col].split('|')]
@@ -278,6 +283,32 @@ def process_row(row: pd.Series,
     log.debug(f'Exiting process_row')
     return row
 
+def process_row_beta(row: pd.Series, 
+                name_col: str,  
+                source_col: str, 
+                uri_col: str, 
+                new_column_name: str,
+                ) -> pd.Series:
+    """
+    Process a row of a DataFrame to create a new column in a specific format.
+
+    Appropriate when the output matches:
+     
+        A:  {Name} {URI}
+
+    Args:
+        row (pd.Series): The row to process
+        name_col (str): The name of the column containing the name
+        source_col (str): The name of the column containing the source
+        uri_col (str): The name of the column containing the URI
+        new_column_name (str): The name of the new column to create
+
+    Returns:
+        pd.Series: The processed row
+    """
+    
+    raise NotImplementedError
+
 
 def add_authority_name_column(df: pd.DataFrame, 
                        name_col: str, 
@@ -304,7 +335,7 @@ def add_authority_name_column(df: pd.DataFrame,
     """
 
     log.debug(f'entering add_authority_name_column')
-    new_df = df.apply(process_row, args=(name_col, role_col, authority_col, authority_id_col, authority, new_column_name), axis=1)
+    new_df = df.apply(process_row_alpha, args=(name_col, role_col, authority_col, authority_id_col, authority, new_column_name), axis=1)
     return new_df
     
         
@@ -321,14 +352,11 @@ def main():
     data = read_csv(args.file_path)
     df = make_df(data)
 
-
-    # # Create some test data
-    # names = 'Smith, John|Jones, Mary|Brown, David'
-    # dates = '1970|1980|1990'
-    # roles = 'author|illustrator|editor'
-    # uris = 'http://id.loc.gov/authorities/names/n79021383|http://id.loc.gov/authorities/names/n79021384|http://id.loc.gov/authorities/names/n79021385'
-    # create_lc_name_from_piped_fields(names, dates, roles, uris)
+    # Add the namePersonOtherVIAF column
     new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='viaf', role_col='Position', new_column_name='namePersonOtherVIAF')
+    # Add the namePersonOtherLocal column
+    new_df = add_authority_name_column(new_df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='local', role_col='Position', new_column_name='namePersonOtherLocal')
+    
     print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
     if not os.path.exists('../output'):
