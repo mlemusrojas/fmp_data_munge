@@ -1,8 +1,10 @@
-import os,sys
+import os, sys
 import argparse
 import csv
-import pandas as pd
 import logging
+from typing import NamedTuple, Callable
+
+import pandas as pd
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -32,6 +34,33 @@ ch.setFormatter(logging.Formatter(
     datefmt='%d/%b/%Y %H:%M:%S',
 ))
 log.addHandler(ch)
+
+# Create a namedtuple Class to store the formatted output chunks
+class FormattedOutput(NamedTuple):
+    """
+    A named tuple 'FormattedOutput' is used to specify how to create a new column in the process_row function.
+
+    Attributes:
+        text (str): The static text to include in the new column. Default is None.
+        column_name (str): The name of an existing column whose values are to be included in the new column. Default is None.
+        function (function): A function that returns a string to be included in the new column. Default is None.
+        kwargs (dict): The keyword arguments to pass to the function. Default is None.
+
+    Any given attribute can be None, but if using a function, the kwargs must be provided.
+
+    Examples:
+        FormattedOutput can be used in the following ways:
+
+        ```
+        FormattedOutput(text=',', column_name=None, function=None, kwargs=None)
+        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None)
+        FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
+        ```
+    """
+    text: str | None
+    column_name: str | None
+    function: Callable | None
+    kwargs: dict[str, str] | None
 
 
 def read_csv(file_path: str) -> list[list[str]]:
@@ -224,10 +253,10 @@ def process_row_alpha(row: pd.Series,
     """
     Process a row of a DataFrame to create a new column with a formatted name.
     
-    Appropriate when the output matches:
+    Appropriate when the desired output matches:
     
-      A:  {Name}, {Role} {Authority URI} or
-      B:  {Name}, {Start Date} - {End Date}, {Role} {Authority URI}
+      A:  ```{Name}, {Role} {Authority URI}``` or
+      B:  ```{Name}, {Start Date} - {End Date}, {Role} {Authority URI}```
     
     Args:
         row (pd.Series): The row to process
@@ -283,31 +312,85 @@ def process_row_alpha(row: pd.Series,
     log.debug(f'Exiting process_row')
     return row
 
-def process_row_beta(row: pd.Series, 
-                name_col: str,  
-                source_col: str, 
-                uri_col: str, 
-                new_column_name: str,
+def process_row_beta(row: pd.Series,
+                new_column_name: str, 
+                output_format: list[FormattedOutput],
+                mask_column: str | None = None,
+                mask_value: str | None = None
                 ) -> pd.Series:
-    """
-    Process a row of a DataFrame to create a new column in a specific format.
 
-    Appropriate when the output matches:
-     
-        A:  {Name} {URI}
+    """
+    Process a row of a DataFrame to create a new column with a format specified by the FormattedOutput namedtuple
 
     Args:
         row (pd.Series): The row to process
-        name_col (str): The name of the column containing the name
-        source_col (str): The name of the column containing the source
-        uri_col (str): The name of the column containing the URI
-        new_column_name (str): The name of the new column to create
+        output_format (list[FormattedOutput]): A list of FormattedOutput namedtuples specifying how to create the new column
+        mask_column (str): The name of the column to use as a mask
+        mask_value (str): The value to use as a mask filter, only values in mask_column matching this value will be processed (case-insensitive)
+
+    Any given attribute can be None, but if using a function, the kwargs must be provided.
+    If multiple attributes are provided, they will be concatenated in the order they are provided.
 
     Returns:
         pd.Series: The processed row
+
+    Example:
+        This is a partial example of output_format for the name and date range:
+        ```
+        output_format = [
+            FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
+            FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
+            FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
+        ]
+        ```
+
+        This is an example of using the mask_column and mask_value arguments:
+        ```
+        new_df = df.apply(process_row, args=(output_format, 'Authority Used', 'viaf'), axis=1)
+        ```
     """
+
+    log.debug(f'entering process_row_beta')
+
+    # check that mask_column and mask_value are both provided or both None
+    if isinstance(mask_column, str) ^ isinstance(mask_value, str):
+        raise ValueError('Both mask_column and mask_value must be provided')
     
-    raise NotImplementedError
+    # track the indices to process based on the mask
+    if mask_column and mask_value:
+        log.debug(f'{mask_column = }, {mask_value = }')
+        values_to_process = [True if i.lower() == mask_value.lower() else False for i in row[mask_column].split('|')]
+        log.debug(f'{values_to_process = }')
+    else:
+        values_to_process = [True] * len(row)
+        log.debug(f'No mask provided, processing all values: {values_to_process = }')
+
+    formatted_output_values: list[str] = []
+
+    for i, value in enumerate(values_to_process):
+        if value:
+            formatted_text: str = ''
+            for chunk in output_format:
+                # check that function and kwargs are both provided or both None
+                if callable(chunk.function) ^ isinstance(chunk.kwargs, dict):
+                    raise ValueError("FormattedOutput must specify both 'function' and 'kwargs' or neither")
+                if chunk.text:
+                    formatted_text += chunk.text
+                if chunk.column_name:
+                    formatted_text += row[chunk.column_name].split('|')[i]
+                if chunk.function:
+                    built_kwargs: dict = {}
+                    for k, v in chunk.kwargs.items(): # type: ignore
+                        built_kwargs[k] = row[v].split('|')[i]
+                    formatted_text += chunk.function(**built_kwargs)
+            formatted_output_values.append(formatted_text)
+
+    row[new_column_name] = '|'.join(formatted_output_values)
+    log.debug(f'Processed row: {row}')
+    return row
+
+
+
 
 
 def add_authority_name_column(df: pd.DataFrame, 
@@ -354,9 +437,16 @@ def main():
 
     # Add the namePersonOtherVIAF column
     new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='viaf', role_col='Position', new_column_name='namePersonOtherVIAF')
-    # Add the namePersonOtherLocal column
-    new_df = add_authority_name_column(new_df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='local', role_col='Position', new_column_name='namePersonOtherLocal')
-    
+    # # Add the namePersonOtherLocal column
+    # new_df = add_authority_name_column(new_df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='local', role_col='Position', new_column_name='namePersonOtherLocal')
+    # # Add the namePersonOtherLC column using process_row_beta
+    output_format = [
+        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
+        FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+    ]
+    new_df = new_df.apply(process_row_beta, args=('namePersonOtherLC', output_format, 'Authority Used', 'local'), axis=1)
+
     print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
     if not os.path.exists('../output'):
