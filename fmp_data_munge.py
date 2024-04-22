@@ -1,15 +1,20 @@
+#region IMPORTS
 import os, sys
 import argparse
 import csv
 import logging
-from typing import NamedTuple, Callable
+from typing import NamedTuple, Callable, Optional, Dict
+from dataclasses import dataclass
+
 
 import pandas as pd
 from dotenv import load_dotenv, find_dotenv
+#endregion
 
 load_dotenv(find_dotenv())
 LGLVL = os.environ['LOGLEVEL']
 
+#region LOGGING
 ## set up logging ---------------------------------------------------
 lglvldct = {
     'DEBUG': logging.DEBUG,
@@ -34,17 +39,46 @@ ch.setFormatter(logging.Formatter(
     datefmt='%d/%b/%Y %H:%M:%S',
 ))
 log.addHandler(ch)
+#endregion
 
-# Create a namedtuple Class to store the formatted output chunks
-class FormattedOutput(NamedTuple):
+#region CLASSES
+# # Create a namedtuple Class to store the formatted output chunks
+# class FormattedOutput(NamedTuple):
+#     """
+#     A named tuple 'FormattedOutput' is used to specify how to create a new column in the process_row function.
+
+#     Attributes:
+#         text (str): The static text to include in the new column. Default is None.
+#         column_name (str): The name of an existing column whose values are to be included in the new column. Default is None.
+#         function (function): A function that returns a string to be included in the new column. Default is None.
+#         kwargs (dict): The keyword arguments to pass to the function. Default is None.
+
+#     Any given attribute can be None, but if using a function, the kwargs must be provided.
+
+#     Examples:
+#         FormattedOutput can be used in the following ways:
+
+#         ```
+#         FormattedOutput(text=',', column_name=None, function=None, kwargs=None)
+#         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None)
+#         FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
+#         ```
+#     """
+#     text: str | None
+#     column_name: str | None
+#     function: Callable | None
+#     kwargs: dict[str, str] | None
+
+@dataclass
+class FormattedOutput:
     """
-    A named tuple 'FormattedOutput' is used to specify how to create a new column in the process_row function.
+    A dataclass 'FormattedOutput' is used to specify how to create a new column in the process_row function.
 
     Attributes:
         text (str): The static text to include in the new column. Default is None.
         column_name (str): The name of an existing column whose values are to be included in the new column. Default is None.
-        function (function): A function that returns a string to be included in the new column. Default is None.
-        kwargs (dict): The keyword arguments to pass to the function. Default is None.
+        function (Callable): A function that returns a string to be included in the new column. Default is None.
+        kwargs (Dict[str, str]): The keyword arguments to pass to the function. Default is None.
 
     Any given attribute can be None, but if using a function, the kwargs must be provided.
 
@@ -57,13 +91,22 @@ class FormattedOutput(NamedTuple):
         FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
         ```
     """
-    text: str | None
-    column_name: str | None
-    function: Callable | None
-    kwargs: dict[str, str] | None
+    text: Optional[str] = None
+    column_name: Optional[str] = None
+    function: Optional[Callable] = None
+    kwargs: Optional[Dict[str, str]] = None
+#endregion
+
+#region FUNCTIONS
+# =============================================================================
+# FUNCTIONS
+# =============================================================================
 
 
-def read_csv(file_path: str) -> list[list[str]]:
+
+
+
+def read_csv(file_path: str) -> list[list[str]]: # MARK: read_csv
     """
     Read a CSV file and return the data as a list of lists
 
@@ -80,7 +123,7 @@ def read_csv(file_path: str) -> list[list[str]]:
         log.info(f'Read {len(data)} rows from {file_path}')
         return data
     
-def make_df(data: list[list[str]]) -> pd.DataFrame:
+def make_df(data: list[list[str]]) -> pd.DataFrame: # MARK: make_df
     """
     Create a pandas DataFrame from a list of lists
     
@@ -97,7 +140,7 @@ def make_df(data: list[list[str]]) -> pd.DataFrame:
     log.info(f'Created DataFrame with {len(df)} rows and {len(df.columns)} columns')
     return df
 
-def create_authority_name(**fields) -> str:
+def create_authority_name(**fields) -> str: # MARK: create_authority_name
     """
     Create an 'authority' name from the name, date, role, and URI
 
@@ -124,7 +167,7 @@ def create_authority_name(**fields) -> str:
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
 
-def create_authority_from_piped_fields(func, **kwargs) -> str | None:
+def create_authority_from_piped_fields(func, **kwargs) -> str | None: # MARK: create_authority_from_piped_fields
     """
     Create an 'authority' formatted field from piped fields
 
@@ -162,7 +205,7 @@ def create_authority_from_piped_fields(func, **kwargs) -> str | None:
     print(concatenated_authority_values)
     return concatenated_authority_values
 
-def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None:
+def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None: # MARK: create_formatted_date
     """
     Create a date range in 'YYYY - YYYY' format from a start date and an end date,
     or a single date if only one is provided
@@ -177,7 +220,7 @@ def create_formatted_date(start_date: str | None, end_date: str | None) -> str |
 
     return ' - '.join([i for i in [start_date, end_date] if i])
     
-def build_uri(authority: str | None, id: str | None) -> str | None:
+def build_uri(authority: str | None, id: str | None) -> str | None: # MARK: build_uri
     """
     Build a URI from an authority and an ID. The authority can be 'lc', 'viaf', or local. If local, returns None.
 
@@ -222,7 +265,7 @@ def build_uri(authority: str | None, id: str | None) -> str | None:
 #     else:
 #         raise ValueError(f'Invalid URI: {uri}')
 
-def reduce_list(values: str, flags: list[bool]) -> str:
+def reduce_list(values: str, flags: list[bool]) -> str: # MARK: reduce_list
     """
     Reduce a list of values based on a list of boolean flags
 
@@ -249,7 +292,7 @@ def process_row_alpha(row: pd.Series,
                 new_column_name: str,
                 start_date_col: str | None = None, 
                 end_date_col: str | None = None
-                ) -> pd.Series:
+                ) -> pd.Series: # MARK: process_row_alpha
     """
     Process a row of a DataFrame to create a new column with a formatted name.
     
@@ -317,7 +360,7 @@ def process_row_beta(row: pd.Series,
                 output_format: list[FormattedOutput],
                 mask_column: str | None = None,
                 mask_value: str | None = None
-                ) -> pd.Series:
+                ) -> pd.Series: # MARK: process_row_beta
 
     """
     Process a row of a DataFrame to create a new column with a format specified by the FormattedOutput namedtuple
@@ -400,7 +443,7 @@ def add_authority_name_column(df: pd.DataFrame,
                        authority: str, 
                        authority_id_col: str, 
                        new_column_name: str
-                       ) -> pd.DataFrame:
+                       ) -> pd.DataFrame: # MARK: add_authority_name_column
     """
     Add a new column to a DataFrame with a name in the required format: 'Last, First, Dates, Role URI'
 
@@ -420,10 +463,10 @@ def add_authority_name_column(df: pd.DataFrame,
     log.debug(f'entering add_authority_name_column')
     new_df = df.apply(process_row_alpha, args=(name_col, role_col, authority_col, authority_id_col, authority, new_column_name), axis=1)
     return new_df
-    
+#endregion    
         
 
-
+#region MAIN FUNCTION
 def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
@@ -435,23 +478,45 @@ def main():
     data = read_csv(args.file_path)
     df = make_df(data)
 
-    # Add the namePersonOtherVIAF column
-    new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='viaf', role_col='Position', new_column_name='namePersonOtherVIAF')
+    # Add the namePersonOtherVIAF column using process_row_alpha
+    # new_df = add_authority_name_column(df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='viaf', role_col='Position', new_column_name='namePersonOtherVIAF')
+    
+    # Add the namePersonOtherVIAF column using process_row_beta
+    output_format = [
+        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
+        FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+        FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=build_uri, kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
+    ]
+    new_df = df.apply(process_row_beta, args=('namePersonOtherVIAF', output_format, 'Authority Used', 'viaf'), axis=1)
+
     # # Add the namePersonOtherLocal column
     # new_df = add_authority_name_column(new_df, name_col='Authoritized Name', authority_id_col='Authority ID', authority_col='Authority Used', authority='local', role_col='Position', new_column_name='namePersonOtherLocal')
-    # # Add the namePersonOtherLC column using process_row_beta
+    # # Add the namePersonOtherLocal column using process_row_beta
     output_format = [
         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
     ]
-    new_df = new_df.apply(process_row_beta, args=('namePersonOtherLC', output_format, 'Authority Used', 'local'), axis=1)
+    new_df = new_df.apply(process_row_beta, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
+
+    # Add the namePersonCreatorLC column
+#     namePersonCreatorLC (FileMakerPro: sources sheet -> Organization Name, Source, URI)
+#       Find name, pull data if LCNAF URIs, ignore all others (this will be the same value as in the subjectNamesLC field)
+#       Neipp, Paul C. http://id.loc.gov/authorities/names/no2008182896
+
+    
+
 
     print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
     if not os.path.exists('../output'):
         os.makedirs('../output')
     new_df.to_csv('../output/processed_data.csv', index=False)
+#endregion
 
+#region DUNDER MAIN
 if __name__ == '__main__':
     main()
+#endregion
