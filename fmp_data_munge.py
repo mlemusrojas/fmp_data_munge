@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import requests
 import time
 
-
+from tqdm import tqdm, tqdm_pandas
 import pandas as pd
 from dotenv import load_dotenv, find_dotenv
 #endregion
@@ -326,6 +326,12 @@ def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series: # MARK: add_na
         row['nameCorpCreatorLocal'] = ''
         return row
     
+    # check if 'namePersonCreatorLC' is empty
+    if row['namePersonCreatorLC']:
+        log.debug(f'namePersonCreatorLC is not empty, returning row')
+        row['nameCorpCreatorLocal'] = ''
+        return row
+    
     # check if 'nameCorpCreatorVIAF' is empty
     if row['nameCorpCreatorVIAF']:
         log.debug(f'nameCorpCreatorVIAF is not empty, returning row')
@@ -333,20 +339,22 @@ def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series: # MARK: add_na
         return row
     
     # Try to pull the first value from 'Organization Name_sources'
-    try:
-        row['nameCorpCreatorLocal'] = row['Organization Name_sources'].split('|')[0]
-    except IndexError:
-        log.debug(f'No Organization Name found in Organization Name_sources, attempting to pull from Organization Name_subjects')
-        try:
-            row['nameCorpCreatorLocal'] = row['Organization Name_subjects'].split('|')[0]
-        except IndexError:
-            log.debug(f'No Organization Name found in Organization Name_subjects, setting nameCorpCreatorLocal to empty string')
-            row['nameCorpCreatorLocal'] = ''
+    sources_name = row['Organization Name_sources'].split('|')[0]
+    if sources_name:
+        row['nameCorpCreatorLocal'] = sources_name
+        return row
+    log.debug(f'No Organization Name found in Organization Name_sources, attempting to pull from Organization Name_subjects')
+    subjects_name = row['Organization Name_subjects'].split('|')[0]
+    if subjects_name:
+        row['nameCorpCreatorLocal'] = subjects_name
+    else:
+        row['nameCorpCreatorLocal'] = ''
+        log.warning(f'No Organization Name found for row: {row}')
 
     log.debug(f'Processed row: {row}')
     return row
 
-def lc_get_subject_uri(subject_term: str) -> str | None: # MARK: lc_api_call
+def lc_get_subject_uri(subject_term: str) -> str | None: # MARK: lc_get_subject_uri
     """
     Call the Library of Congress API to get the URI for a subject term
 
@@ -377,6 +385,8 @@ def lc_get_name_type(uri: str) -> str | None: # MARK: lc_get_name_type
     """
     log.debug(f'entering lc_get_name_type')
 
+    # time.sleep(0.2)
+
     response = requests.get(f'{uri}.json')
     if response.ok:
         log.debug(f'LC API call successful')
@@ -395,6 +405,35 @@ def lc_get_name_type(uri: str) -> str | None: # MARK: lc_get_name_type
             return 'Personal'
         
     return None
+
+def get_viaf_name(uri: str, backup_name: str) -> str | None: # MARK: get_viaf_name
+    """
+    Call the VIAF API to get the name of a person or organization
+
+    Args:
+        uri (str): The URI to search for
+
+    Returns:
+        str: The name of the person or organization or None if not found
+    """
+
+    response = requests.get(f'{uri}/viaf.json')
+    if response.ok:
+        response_json: dict[str, Any] = response.json()
+        main_headings: dict[str, Any] = response_json.get('mainHeadings', {})
+        data: list[dict[str, Any]] | dict[str, Any] = main_headings.get('data', [])
+        if isinstance(data, dict):
+            data = [data]
+        for d in data:
+            try:
+                sources = d.get('sources', None)
+            except AttributeError:
+                log.warning(f'Error with {uri}')
+                raise
+            if 'LC' in sources['s']:
+                return d.get('text', None)
+    log.warning(f'No LC source found for {uri}, returning backup name {backup_name}')
+    return backup_name
 
 
 def get_unique_values_from_column(column: pd.Series) -> set[str]: # MARK: get_unique_values_from_column
@@ -426,7 +465,7 @@ def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]: # MA
     """
     
     uri_dict: dict[str, str] = {}
-    for value in values:
+    for value in tqdm(values):
         uri = api_call(value)
         if uri:
             uri_dict[value] = uri
@@ -563,67 +602,103 @@ def main():
     args = parser.parse_args()
     log.info(f'successfully parsed args, ``{args}``')
 
+    # Set up tqdm.pandas() to use progress_apply
+    tqdm.pandas()
+
+    # print('Testing get_viaf_name function')
+    # print(get_viaf_name('http://viaf.org/viaf/77116355'))
+    # sys.exit('stopping')
+
+
     # Read the CSV file
     data:list[list[str]] = read_csv(args.file_path)
     df: pd.DataFrame = make_df(data)
 
     
-    # Add the namePersonOtherVIAF column
+    # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
+    log.debug(f'Adding the namePersonOtherVIAF column')
     output_format: list[FormattedOutput] = [
-        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=get_viaf_name, kwargs={'uri': 'Authority URI', 'backup_name': 'Authoritized Name'}),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name=None, function=build_uri, kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
     ]
-    new_df = df.apply(process_row, args=('namePersonOtherVIAF', output_format, 'Authority Used', 'viaf'), axis=1)
+    new_df: pd.DataFrame = df.apply(process_row, args=('namePersonOtherVIAF', output_format, 'Authority Used', 'viaf'), axis=1)
 
-    # # Add the namePersonOtherLocal column
+    # # Add the namePersonOtherLocal column MARK: namePersonOtherLocal
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
     ]
-    new_df = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
+    new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
 
     # Make the nameType column
-    new_df = new_df.apply(make_name_type_column, args=('URI', 'Source'), axis=1)
+    print('Adding the Name Type column. This will take a while as it requires an API call for each row.')
+    new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, args=('URI', 'Source'), axis=1) # type: ignore
+    print('Finished adding the Name Type column')
 
-    # Add the namePersonCreatorLC and nameCorpCreatorLC columns
-    new_df = new_df.apply(handle_person_and_corp_lc_names, axis=1)
+    # Add the namePersonCreatorLC and nameCorpCreatorLC columns MARK: namePersonCreatorLC, nameCorpCreatorLC
+    new_df: pd.DataFrame = new_df.apply(handle_person_and_corp_lc_names, axis=1)
 
-    # Add the nameCorpCreatorVIAF column
+    # Add the nameCorpCreatorVIAF column MARK: nameCorpCreatorVIAF
+    """
+    If no LCNAF, find name, Pull only VIAF URIs, ignore all others
+    """
+
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Organization Name_sources', function=None, kwargs=None),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name='URI', function=None, kwargs=None)
     ]
-    new_df = new_df.apply(process_row, args=('nameCorpCreatorVIAF', output_format, 'Source', 'VIAF'), axis=1)
+    new_df: pd.DataFrame = new_df.apply(process_row, args=('nameCorpCreatorVIAF', output_format, 'Source', 'VIAF'), axis=1)
 
-    # We only want to keep the nameCorpCreatorVIAF column if the nameCorpCreatorLC column is empty
-    new_df['nameCorpCreatorVIAF'] = new_df.apply(lambda row: row['nameCorpCreatorVIAF'] if not row['nameCorpCreatorLC'] else '', axis=1)
+    # We only want to keep the nameCorpCreatorVIAF column if the nameCorpCreatorLC and namePersonCreatorLC columns are empty
+    new_df['nameCorpCreatorVIAF'] = new_df.apply(
+        lambda row: row['nameCorpCreatorVIAF'] 
+        if not row['nameCorpCreatorLC'] 
+        and not row['namePersonCreatorLC'] 
+        else '', 
+        axis=1
+        )
+    # new_df['nameCorpCreatorVIAF'] = new_df.apply(lambda row: row['nameCorpCreatorVIAF'] if not row['nameCorpCreatorLC'] else '', axis=1)
 
-    # Add the nameCorpCreatorLocal column
-#   *nameCorpCreatorLocal (FileMakerPro: sources sheet -> Organization Name, Source)
+
+    # Add the nameCorpCreatorLocal column MARK: nameCorpCreatorLocal
+#   nameCorpCreatorLocal (FileMakerPro: sources sheet -> Organization Name, Source)
 #       If no LCNAF and no VIAF, find name, pull just one
 #       If no name is found as Local, add the Organization Name from the subjects sheet (this will be the same value as in the subjectCorpLocal field)
 #       Ex: The Presbyterian Journal
 
-    new_df = new_df.apply(add_nameCorpCreatorLocal_column, axis=1)
+    new_df: pd.DataFrame = new_df.apply(add_nameCorpCreatorLocal_column, axis=1)
 
-    # Add the subjectTopicsLC and subjectTopicsLocal columns
+    # Add the subjectTopicsLC and subjectTopicsLocal columns MARK: subjectTopicsLC, subjectTopicsLocal
+    print('Adding subjectTopicsLC and subjectTopicsLocal columns (hitting LC API for each unique subject term)')
     unique_subjects = get_unique_values_from_column(new_df['Subject Heading'])
     uri_dict = build_uri_dict(unique_subjects, lc_get_subject_uri)
-    new_df = new_df.apply(add_subjectTopics, args=(uri_dict,), axis=1)
+    new_df: pd.DataFrame = new_df.apply(add_subjectTopics, args=(uri_dict,), axis=1)
+    print('Finished adding subjectTopicsLC and subjectTopicsLocal columns')
 
+    # Add subjectNamesLC (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectNamesLC
+    # this will be the same value as in the namePersonCreatorLC field, so we can just copy that value
+    new_df['subjectNamesLC'] = new_df['namePersonCreatorLC']
 
-    # Grab some values from the newly created column to print for testing
-    check_vals: list[str] = new_df['subjectTopicsLC'].tolist()
-    print(check_vals[:10])
+    # Add subjectCorpLC (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectCorpLC
+    # this will be the same value as in the nameCorpCreatorLC field, so we can just copy that value
+    new_df['subjectCorpLC'] = new_df['nameCorpCreatorLC']
 
-    check_vals: list[str] = new_df['subjectTopicsLocal'].tolist()
-    print(check_vals[:10])
+    # Add subjectCorpVIAF (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectCorpVIAF
+    # this will be the same value as in the nameCorpCreatorVIAF field, so we can just copy that value
+    new_df['subjectCorpVIAF'] = new_df['nameCorpCreatorVIAF']
+
+    # # Grab some values from the newly created column to print for testing
+    # check_vals: list[str] = new_df['subjectTopicsLC'].tolist()
+    # print(check_vals[:10])
+
+    # check_vals: list[str] = new_df['subjectTopicsLocal'].tolist()
+    # print(check_vals[:10])
 
 
     print(new_df.head())
