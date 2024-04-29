@@ -35,7 +35,7 @@ This script takes a spreadsheet of FileMaker Pro data and adds new columns to th
     ```shell
     python fmp_data_munge.py [input file path] [output file path]
     ```
-    If the output directory does not exist, the script will create it. If the output file already exists, the script will overwrite it. If no output file path is provided, the script will create a new file in ../output/ named "processed_data.csv". If there are spaces in the file path, enclose the path in quotes.
+    The input and output files must be in csv format. If the output directory does not exist, the script will create it. If the output file already exists, the script will overwrite it. If no output file path is provided, the script will create a new file in ../output/ named "processed_data.csv". If there are spaces in the file path, enclose the path in quotes.
 
     example:
     ```shell
