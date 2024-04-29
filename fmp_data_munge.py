@@ -125,6 +125,18 @@ def read_csv(file_path: str) -> list[list[str]]:
         log.info(f'Read {len(data)} rows from {file_path}')
         return data
     
+def write_csv(data: pd.DataFrame, file_path: str):
+    """
+    Write a pandas DataFrame to a CSV file
+
+    Args:
+        data (pd.DataFrame): The data to write to the CSV file
+        file_path (str): The path to the CSV file
+    """
+
+    data.to_csv(file_path, index=False)
+    log.info(f'Wrote data to {file_path}')
+    
 def make_df(data: list[list[str]]) -> pd.DataFrame:
     """
     Create a pandas DataFrame from a list of lists
@@ -597,7 +609,11 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
 def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('file_path', help='Path to the CSV file to be read')
+    parser.add_argument('input_file', help='The path to the input CSV file')
+    parser.add_argument('output_file', help='''The path to the output CSV file. 
+                        Will be created if it does not exist. Will overwrite if
+                         it does. Default is ../output/processed_data.csv''',
+                        default='../output/processed_data.csv')
     args = parser.parse_args()
     log.info(f'successfully parsed args, ``{args}``')
 
@@ -607,12 +623,12 @@ def main():
 
 
     # Read the CSV file
-    data:list[list[str]] = read_csv(args.file_path)
+    data:list[list[str]] = read_csv(args.input_file)
     df: pd.DataFrame = make_df(data)
-
     
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
+    print('Adding the namePersonOtherVIAF column. This will take a while as it requires an API call for each row.')
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
                         kwargs={'uri': 'Authority URI'}),
@@ -717,6 +733,10 @@ def main():
 
     # print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
+    output_dir = os.path.dirname(args.output_file)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    write_csv(new_df, args.output_file)
     print('Done!')
 #endregion
 
