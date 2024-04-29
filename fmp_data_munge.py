@@ -481,7 +481,7 @@ def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]:
         uri = api_call(value)
         if uri:
             uri_dict[value] = uri
-        time.sleep(0.2)
+        # time.sleep(0.2)
     return uri_dict
 
 def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series:
