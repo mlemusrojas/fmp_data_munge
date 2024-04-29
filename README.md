@@ -1,7 +1,7 @@
 # fmp_data_munge
 
 ## Description
-This script takes a spreadsheet of FileMaker Pro data and adds new columns to the spreadsheet based on the data in the existing columns and API calls to LCNAF and VIAF.
+This script takes a csv spreadsheet of FileMaker Pro data and adds new columns to the csv based on the data in the existing columns and API calls to LCNAF and VIAF.
 
 ## Installation
 1. Create a directory to hold the project and navigate to it (you can name it what you like):
