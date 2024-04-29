@@ -416,6 +416,8 @@ def lc_get_name_type(uri: str) -> str | None:
             return 'Corporate'
         elif "http://www.loc.gov/mads/rdf/v1#PersonalName" in name_types:
             return 'Personal'
+    else:
+        log.warning(f'LC API call failed for ```{uri}```, {response.status_code = }')
         
     return None
 
@@ -427,7 +429,7 @@ def get_viaf_name(uri: str) -> str | None:
         uri (str): The URI to search for
 
     Returns:
-        str: The name of the person or organization or None if not found
+        str: The name of the person or organization or 'URI_ERROR' if not found
     """
 
     response = requests.get(f'{uri}/viaf.json')
@@ -445,8 +447,8 @@ def get_viaf_name(uri: str) -> str | None:
                 raise
             if 'LC' in sources['s']:
                 return d.get('text', None)
-    log.warning(f'No LC source found for {uri}, returning backup name {backup_name}')
-    return backup_name
+    log.warning(f'Unable to find name for ``{uri}``')
+    return 'URI_ERROR'
 
 def get_unique_values_from_column(column: pd.Series) -> set[str]:
     """
