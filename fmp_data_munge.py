@@ -108,7 +108,7 @@ class FormattedOutput:
 # =============================================================================
 
 
-def read_csv(file_path: str) -> list[list[str]]: # MARK: read_csv
+def read_csv(file_path: str) -> list[list[str]]:
     """
     Read a CSV file and return the data as a list of lists
 
@@ -125,7 +125,7 @@ def read_csv(file_path: str) -> list[list[str]]: # MARK: read_csv
         log.info(f'Read {len(data)} rows from {file_path}')
         return data
     
-def make_df(data: list[list[str]]) -> pd.DataFrame: # MARK: make_df
+def make_df(data: list[list[str]]) -> pd.DataFrame:
     """
     Create a pandas DataFrame from a list of lists
     
@@ -138,11 +138,11 @@ def make_df(data: list[list[str]]) -> pd.DataFrame: # MARK: make_df
     """
 
     df = pd.DataFrame(data[1:], columns=data[0])
-    print(df.info())
+    # print(df.info())
     log.info(f'Created DataFrame with {len(df)} rows and {len(df.columns)} columns')
     return df
 
-def create_authority_name(**fields) -> str: # MARK: create_authority_name
+def create_authority_name(**fields) -> str:
     """
     Create an 'authority' name from the name, date, role, and URI
 
@@ -168,7 +168,7 @@ def create_authority_name(**fields) -> str: # MARK: create_authority_name
     role_uri_merge = ' '.join([ i for i in [role, uri] if i])
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
-def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None: # MARK: create_formatted_date
+def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None:
     """
     Create a date range in 'YYYY - YYYY' format from a start date and an end date,
     or a single date if only one is provided
@@ -183,7 +183,7 @@ def create_formatted_date(start_date: str | None, end_date: str | None) -> str |
 
     return ' - '.join([i for i in [start_date, end_date] if i])
     
-def build_uri(authority: str | None, id: str | None) -> str | None: # MARK: build_uri
+def build_uri(authority: str | None, id: str | None) -> str | None:
     """
     Build a URI from an authority and an ID. The authority can be 'lc', 'viaf', or local. If local, returns None.
 
@@ -211,7 +211,7 @@ def build_uri(authority: str | None, id: str | None) -> str | None: # MARK: buil
 
     return uri
 
-def reduce_list(values: str, flags: list[bool]) -> str: # MARK: reduce_list
+def reduce_list(values: str, flags: list[bool]) -> str:
     """
     Reduce a list of values based on a list of boolean flags
 
@@ -234,7 +234,7 @@ def process_row(row: pd.Series,
                 output_format: list[FormattedOutput],
                 mask_column: str | None = None,
                 mask_value: str | None = None
-                ) -> pd.Series: # MARK: process_row
+                ) -> pd.Series:
 
     """
     Process a row of a DataFrame to create a new column with a format specified by the FormattedOutput namedtuple
@@ -306,7 +306,7 @@ def process_row(row: pd.Series,
     log.debug(f'Processed row: {row}')
     return row
 
-def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series: # MARK: add_nameCorpCreatorLocal_column
+def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series:
     """
     Process a row of a DataFrame to create a new column, 
     populating it with the 'Organization Name' from the 'sources' sheet if neither 'LCNAF' nor 'VIAF' names are found.
@@ -354,7 +354,8 @@ def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series: # MARK: add_na
     log.debug(f'Processed row: {row}')
     return row
 
-def lc_get_subject_uri(subject_term: str) -> str | None: # MARK: lc_get_subject_uri
+# MARK: API CALLS
+def lc_get_subject_uri(subject_term: str) -> str | None:
     """
     Call the Library of Congress API to get the URI for a subject term
 
@@ -373,7 +374,7 @@ def lc_get_subject_uri(subject_term: str) -> str | None: # MARK: lc_get_subject_
         return url
     return None
 
-def lc_get_name_type(uri: str) -> str | None: # MARK: lc_get_name_type
+def lc_get_name_type(uri: str) -> str | None:
     """
     Call the Library of Congress API to get the type of a name (Personal or Corporate)
 
@@ -406,7 +407,7 @@ def lc_get_name_type(uri: str) -> str | None: # MARK: lc_get_name_type
         
     return None
 
-def get_viaf_name(uri: str, backup_name: str) -> str | None: # MARK: get_viaf_name
+def get_viaf_name(uri: str) -> str | None:
     """
     Call the VIAF API to get the name of a person or organization
 
@@ -435,8 +436,7 @@ def get_viaf_name(uri: str, backup_name: str) -> str | None: # MARK: get_viaf_na
     log.warning(f'No LC source found for {uri}, returning backup name {backup_name}')
     return backup_name
 
-
-def get_unique_values_from_column(column: pd.Series) -> set[str]: # MARK: get_unique_values_from_column
+def get_unique_values_from_column(column: pd.Series) -> set[str]:
     """
     Get unique values from a column of a DataFrame, separating pipe-separated values
 
@@ -452,7 +452,7 @@ def get_unique_values_from_column(column: pd.Series) -> set[str]: # MARK: get_un
         unique_values.update(value.split('|'))
     return unique_values
 
-def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]: # MARK: build_uri_dict
+def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]:
     """
     Build a dictionary of URIs from a set of values using an API call
 
@@ -472,7 +472,7 @@ def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]: # MA
         time.sleep(0.2)
     return uri_dict
 
-def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series: # MARK: add_subjectTopics
+def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series:
     """
     Process a row of a DataFrame to populate either subjectTopicsLC or subjectTopicsLocal columns. 
     Populates subjectTopicsLC if an LC URI is found, subjectTopicsLocal if not.
@@ -510,7 +510,7 @@ def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series: # 
     log.debug(f'Processed row: {row}')
     return row
 
-def make_name_type_column(row: pd.Series, uri_column: str, authority_column: str) -> pd.Series: # MARK: make_name_type_column
+def make_name_type_column(row: pd.Series, uri_column: str, authority_column: str) -> pd.Series:
     """
     Process a row of a DataFrame to create a new column,
     populating it with either 'Personal' or 'Corporate' based on an LC API call.
@@ -550,7 +550,7 @@ def make_name_type_column(row: pd.Series, uri_column: str, authority_column: str
     log.debug(f'Processed row: {row}')
     return row
 
-def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series: # MARK: handle_person_and_corp_lc_names
+def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
     """
     Creates the namePersonCreatorLC and nameCorpCreatorLC columns by handing off to process_row based on the value
     in the 'Name Type' column.
@@ -593,7 +593,6 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series: # MARK: handle
 
 #endregion    
         
-
 #region MAIN FUNCTION
 def main():
     # Process command line arguments using argparse
@@ -605,9 +604,6 @@ def main():
     # Set up tqdm.pandas() to use progress_apply
     tqdm.pandas()
 
-    # print('Testing get_viaf_name function')
-    # print(get_viaf_name('http://viaf.org/viaf/77116355'))
-    # sys.exit('stopping')
 
 
     # Read the CSV file
@@ -618,15 +614,25 @@ def main():
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
     output_format: list[FormattedOutput] = [
-        FormattedOutput(text=None, column_name=None, function=get_viaf_name, kwargs={'uri': 'Authority URI', 'backup_name': 'Authoritized Name'}),
+        FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
+                        kwargs={'uri': 'Authority URI'}),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name=None, function=build_uri, kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
+        FormattedOutput(text=None, column_name=None, function=build_uri, 
+                        kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
     ]
-    new_df: pd.DataFrame = df.apply(process_row, args=('namePersonOtherVIAF', output_format, 'Authority Used', 'viaf'), axis=1)
+    new_df: pd.DataFrame = df.progress_apply(process_row, 
+                                             args=('namePersonOtherVIAF', 
+                                                   output_format, 
+                                                   'Authority Used', 
+                                                   'viaf'), 
+                                             axis=1) # type: ignore
+    print('Finished adding the namePersonOtherVIAF column')
 
-    # # Add the namePersonOtherLocal column MARK: namePersonOtherLocal
+    # Add the namePersonOtherLocal column MARK: namePersonOtherLocal
+    log.debug(f'Adding the namePersonOtherLocal column')
+    print('Adding the namePersonOtherLocal column.') 
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
@@ -634,20 +640,20 @@ def main():
     ]
     new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
-
     # Make the nameType column
-    print('Adding the Name Type column. This will take a while as it requires an API call for each row.')
+    print('Adding the (temporary) Name Type column. This will take a while as it requires an API call for each row.')
     new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, args=('URI', 'Source'), axis=1) # type: ignore
     print('Finished adding the Name Type column')
 
     # Add the namePersonCreatorLC and nameCorpCreatorLC columns MARK: namePersonCreatorLC, nameCorpCreatorLC
+    print('Adding the namePersonCreatorLC and nameCorpCreatorLC columns')
     new_df: pd.DataFrame = new_df.apply(handle_person_and_corp_lc_names, axis=1)
 
     # Add the nameCorpCreatorVIAF column MARK: nameCorpCreatorVIAF
     """
     If no LCNAF, find name, Pull only VIAF URIs, ignore all others
     """
-
+    print('Adding the nameCorpCreatorVIAF column.')
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Organization Name_sources', function=None, kwargs=None),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
@@ -663,15 +669,16 @@ def main():
         else '', 
         axis=1
         )
-    # new_df['nameCorpCreatorVIAF'] = new_df.apply(lambda row: row['nameCorpCreatorVIAF'] if not row['nameCorpCreatorLC'] else '', axis=1)
-
 
     # Add the nameCorpCreatorLocal column MARK: nameCorpCreatorLocal
-#   nameCorpCreatorLocal (FileMakerPro: sources sheet -> Organization Name, Source)
-#       If no LCNAF and no VIAF, find name, pull just one
-#       If no name is found as Local, add the Organization Name from the subjects sheet (this will be the same value as in the subjectCorpLocal field)
-#       Ex: The Presbyterian Journal
-
+    """
+    nameCorpCreatorLocal (FileMakerPro: sources sheet -> Organization Name, Source)
+        If no LCNAF and no VIAF, find name, pull just one
+        If no name is found as Local, add the Organization Name from the 
+        subjects sheet (this will be the same value as in the subjectCorpLocal field)
+        Ex: The Presbyterian Journal
+    """
+    print('Adding the nameCorpCreatorLocal column.')
     new_df: pd.DataFrame = new_df.apply(add_nameCorpCreatorLocal_column, axis=1)
 
     # Add the subjectTopicsLC and subjectTopicsLocal columns MARK: subjectTopicsLC, subjectTopicsLocal
@@ -681,32 +688,36 @@ def main():
     new_df: pd.DataFrame = new_df.apply(add_subjectTopics, args=(uri_dict,), axis=1)
     print('Finished adding subjectTopicsLC and subjectTopicsLocal columns')
 
-    # Add subjectNamesLC (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectNamesLC
+    # Add subjectNamesLC MARK: subjectNamesLC
+    """
+    (FileMakerPro: sources sheet -> Organization Name, Source, URI)
+    """
     # this will be the same value as in the namePersonCreatorLC field, so we can just copy that value
+    print('Adding subjectNamesLC column')
     new_df['subjectNamesLC'] = new_df['namePersonCreatorLC']
 
-    # Add subjectCorpLC (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectCorpLC
+    # Add subjectCorpLC MARK: subjectCorpLC
+    """
+    (FileMakerPro: sources sheet -> Organization Name, Source, URI)
+    """
     # this will be the same value as in the nameCorpCreatorLC field, so we can just copy that value
+    print('Adding subjectCorpLC column')
     new_df['subjectCorpLC'] = new_df['nameCorpCreatorLC']
 
-    # Add subjectCorpVIAF (FileMakerPro: sources sheet -> Organization Name, Source, URI) MARK: subjectCorpVIAF
+    # Add subjectCorpVIAF MARK: subjectCorpVIAF
+    """
+    (FileMakerPro: sources sheet -> Organization Name, Source, URI)
+    """
     # this will be the same value as in the nameCorpCreatorVIAF field, so we can just copy that value
+    print('Adding subjectCorpVIAF column')
     new_df['subjectCorpVIAF'] = new_df['nameCorpCreatorVIAF']
 
-    # # Grab some values from the newly created column to print for testing
-    # check_vals: list[str] = new_df['subjectTopicsLC'].tolist()
-    # print(check_vals[:10])
+    # Remove the 'Name Type' column
+    new_df.drop('Name Type', axis=1, inplace=True)
 
-    # check_vals: list[str] = new_df['subjectTopicsLocal'].tolist()
-    # print(check_vals[:10])
-
-
-    print(new_df.head())
+    # print(new_df.head())
     log.info(f'Finished processing DataFrame, writing to CSV')
-    if not os.path.exists('../output'):
-        os.makedirs('../output')
-    new_df.to_csv('../output/processed_data.csv', index=False)
-
+    print('Done!')
 #endregion
 
 #region DUNDER MAIN
