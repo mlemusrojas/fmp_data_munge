@@ -50,35 +50,6 @@ log.addHandler(ch)
 
 #region CLASSES
 
-# region
-# # Create a namedtuple Class to store the formatted output chunks
-# class FormattedOutput(NamedTuple):
-#     """
-#     A named tuple 'FormattedOutput' is used to specify how to create a new column in the process_row function.
-
-#     Attributes:
-#         text (str): The static text to include in the new column. Default is None.
-#         column_name (str): The name of an existing column whose values are to be included in the new column. Default is None.
-#         function (function): A function that returns a string to be included in the new column. Default is None.
-#         kwargs (dict): The keyword arguments to pass to the function. Default is None.
-
-#     Any given attribute can be None, but if using a function, the kwargs must be provided.
-
-#     Examples:
-#         FormattedOutput can be used in the following ways:
-
-#         ```
-#         FormattedOutput(text=',', column_name=None, function=None, kwargs=None)
-#         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None)
-#         FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
-#         ```
-#     """
-#     text: str | None
-#     column_name: str | None
-#     function: Callable | None
-#     kwargs: dict[str, str] | None
-# endregion
-
 @dataclass
 class FormattedOutput:
     """
@@ -105,6 +76,21 @@ class FormattedOutput:
     column_name: Optional[str] = None
     function: Optional[Callable] = None
     kwargs: Optional[Dict[str, str]] = None
+
+class RateLimiter:
+    def __init__(self, rate_limits):
+        self.rate_limits = rate_limits
+        self.last_api_call_times = {domain: 0.0 for domain in rate_limits}
+
+    def rate_limit_api_call(self, domain):
+        current_time = time.time()
+        time_since_last_call = current_time - self.last_api_call_times[domain]
+        rate_limit = self.rate_limits[domain]
+        if time_since_last_call < rate_limit:
+            rest_time = rate_limit - time_since_last_call
+            log.debug(f'Rate limiting API call to {domain} for {rest_time} seconds')
+            time.sleep(rest_time)
+        self.last_api_call_times[domain] = time.time()
 #endregion
 
 #region FUNCTIONS
@@ -372,6 +358,13 @@ def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series:
     return row
 
 # MARK: API CALLS
+
+# Initialize the rate limiter
+rate_limiter = RateLimiter({
+    'lc': 1,
+    'viaf': 1
+})
+
 def lc_get_subject_uri(subject_term: str) -> str | None:
     """
     Call the Library of Congress API to get the URI for a subject term
@@ -382,6 +375,8 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
     Returns:
         str: The URI of the subject term or None if not found
     """
+    # Limit the rate of API calls if necessary
+    rate_limiter.rate_limit_api_call('lc')
 
     response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term}', allow_redirects=True)
     if response.ok:
@@ -403,7 +398,8 @@ def lc_get_name_type(uri: str) -> str | None:
     """
     log.debug(f'entering lc_get_name_type')
 
-    # time.sleep(0.2)
+    # Limit the rate of API calls if necessary
+    rate_limiter.rate_limit_api_call('lc')
 
     response = requests.get(f'{uri}.json')
     if response.ok:
@@ -436,6 +432,10 @@ def get_viaf_name(uri: str) -> str | None:
     Returns:
         str: The name of the person or organization or 'URI_ERROR' if not found
     """
+    log.debug(f'entering get_viaf_name')
+
+    # Limit the rate of API calls if necessary
+    rate_limiter.rate_limit_api_call('viaf')
 
     response = requests.get(f'{uri}/viaf.json')
     if response.ok:
@@ -664,7 +664,7 @@ def main():
     new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
     # Make the nameType column
-    print('Adding the (temporary) Name Type column. This will take a while as it requires an API call for each row.')
+    print('Adding the (temporary) Name Type column. This will take a while as it requires an API call for each LCNAF URI.')
     new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, args=('URI', 'Source'), axis=1) # type: ignore
     print('Finished adding the Name Type column')
 
