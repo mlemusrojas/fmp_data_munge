@@ -13,15 +13,20 @@ import pandas as pd
 from dotenv import load_dotenv, find_dotenv
 #endregion
 
-load_dotenv(find_dotenv())
-LGLVL = os.environ['LOGLEVEL']
+# Load environment variables. If no .env exists, use default values
+LGLVL = 'INFO'
+dotenv_path = find_dotenv()
+if dotenv_path:
+    load_dotenv(dotenv_path, override=True)
+    LGLVL = os.environ['LOGLEVEL']
 
 #region LOGGING
 ## set up logging ---------------------------------------------------
 lglvldct = {
     'DEBUG': logging.DEBUG,
     'INFO': logging.INFO,
-    'WARN': logging.WARNING
+    'WARN': logging.WARNING,
+    'ERROR': logging.ERROR,
 }
 logging.basicConfig(
     level=lglvldct[LGLVL],  # type: ignore -- assigns the level-object to the level-key loaded from the envar
@@ -35,7 +40,7 @@ log = logging.getLogger(__name__)
 log.info(f'\n\n`log` logging working, using level, ``{LGLVL}``')
 
 ch = logging.StreamHandler()  # ch stands for `Console Handler`
-ch.setLevel(logging.WARN)  # note: this level is _not_ the same as the file-handler level set in the `.env`
+ch.setLevel(logging.ERROR)  # note: this level is _not_ the same as the file-handler level set in the `.env`
 ch.setFormatter(logging.Formatter(
     '[%(asctime)s] %(levelname)s [%(module)s-%(funcName)s()::%(lineno)d] %(message)s',
     datefmt='%d/%b/%Y %H:%M:%S',
