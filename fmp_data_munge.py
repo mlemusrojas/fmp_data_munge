@@ -487,17 +487,24 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
 
     # Check the local cache
     if subject_term in lc_subject_cache:
+        if lc_subject_cache[subject_term] == 'NOT_FOUND':
+            return None
         return lc_subject_cache[subject_term]
 
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('lc')
 
-    response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term}', allow_redirects=True)
+    try:
+        response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term}', allow_redirects=True)
+    except requests.exceptions.RequestException as e:
+        log.error(f'Error with request: {e}')
+        return None
     if response.ok:
-        url = response.url
-        if url.endswith('.json'):
-            url = url[:-5]
-        return lc_subject_cache.write_and_return_response(subject_term, url)
+        return lc_subject_cache.write_and_return_response(subject_term, response.headers['x-uri'])
+    
+    if response.status_code == 404:
+        log.debug(f'No URI found for {subject_term}')
+        lc_subject_cache[subject_term] = 'NOT_FOUND'
 
     return None
 
@@ -515,6 +522,8 @@ def lc_get_name_type(uri: str) -> str | None:
 
     # Check the local cache
     if uri in lc_name_type_cache:
+        if lc_name_type_cache[uri] == 'NOT_FOUND':
+            return None
         return lc_name_type_cache[uri]
 
     # Limit the rate of API calls if necessary
@@ -531,6 +540,7 @@ def lc_get_name_type(uri: str) -> str | None:
         name_types: list[str] = matching_dict.get('@type', None)
         log.debug(f'{name_types = }')
         if not name_types:
+            log.warning(f'No name types found for {uri}')
             return None
         if "http://www.loc.gov/mads/rdf/v1#CorporateName" in name_types:
             return lc_name_type_cache.write_and_return_response(uri, 'Corporate')
@@ -538,6 +548,10 @@ def lc_get_name_type(uri: str) -> str | None:
             return lc_name_type_cache.write_and_return_response(uri, 'Personal')
     else:
         log.warning(f'LC API call failed for ```{uri}```, {response.status_code = }')
+
+    if response.status_code == 404:
+        log.warning(f'No name found for {uri}')
+        lc_name_type_cache[uri] = 'NOT_FOUND'
         
     return None
 
@@ -555,6 +569,8 @@ def get_viaf_name(uri: str) -> str:
 
     # Check the local cache
     if uri in viaf_name_cache:
+        if viaf_name_cache[uri] == 'NOT_FOUND':
+            return 'URI_ERROR'
         return viaf_name_cache[uri]
 
     # Limit the rate of API calls if necessary
@@ -586,6 +602,7 @@ def get_viaf_name(uri: str) -> str:
                 return viaf_name_cache.write_and_return_response(uri, name)
             
     log.warning(f'Unable to find name for ``{uri}``')
+    viaf_name_cache[uri] = 'NOT_FOUND'
     return 'URI_ERROR'
 
 def get_unique_values_from_column(column: pd.Series) -> set[str]:
