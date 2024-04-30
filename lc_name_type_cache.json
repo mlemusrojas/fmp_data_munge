@@ -39,6 +39,7 @@
     "http://id.loc.gov/authorities/names/n85232924": "Corporate",
     "http://id.loc.gov/authorities/names/n99023655": "Corporate",
     "http://id.loc.gov/authorities/names/n85369107": "Corporate",
+    "http://id.loc.gov/authorities/names/n90000541": "NOT_FOUND",
     "http://id.loc.gov/authorities/names/n2007007786": "Personal",
     "http://id.loc.gov/authorities/names/no00015976": "Corporate",
     "http://id.loc.gov/authorities/names/no93031581": "Corporate",
@@ -71,8 +72,7 @@
     "http://id.loc.gov/authorities/names/n85137476": "Corporate",
     "http://id.loc.gov/authorities/names/no00043332": "Corporate",
     "http://id.loc.gov/authorities/names/n79022233": "Corporate",
+    "http://id.loc.gov/authorities/names/n90024785": "NOT_FOUND",
     "http://id.loc.gov/authorities/names/n79096842": "Corporate",
-    "http://id.loc.gov/authorities/names/n98104369": "Corporate",
-    "http://id.loc.gov/authorities/names/n90000541": "NOT_FOUND",
-    "http://id.loc.gov/authorities/names/n90024785": "NOT_FOUND"
+    "http://id.loc.gov/authorities/names/n98104369": "Corporate"
 }
