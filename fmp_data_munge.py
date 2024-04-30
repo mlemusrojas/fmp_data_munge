@@ -494,8 +494,16 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('lc')
 
+    if len(subject_term) > 1:
+        subject_term_correct_case = subject_term[0].upper() + subject_term[1:].lower()
+    else:
+        subject_term_correct_case = subject_term
+        
+    if subject_term != subject_term_correct_case:
+        log.debug(f'Correcting case for {subject_term} to {subject_term_correct_case} for API call')
+
     try:
-        response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term}', allow_redirects=True)
+        response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term_correct_case}', allow_redirects=True)
     except requests.exceptions.RequestException as e:
         log.error(f'Error with request: {e}')
         return None
@@ -563,14 +571,12 @@ def get_viaf_name(uri: str) -> str:
         uri (str): The URI to search for
 
     Returns:
-        str: The name of the person or organization or 'URI_ERROR' if not found
+        str: The name of the person or organization or 'NOT_FOUND' if not found
     """
     log.debug(f'entering get_viaf_name')
 
     # Check the local cache
     if uri in viaf_name_cache:
-        if viaf_name_cache[uri] == 'NOT_FOUND':
-            return 'URI_ERROR'
         return viaf_name_cache[uri]
 
     # Limit the rate of API calls if necessary
@@ -580,10 +586,18 @@ def get_viaf_name(uri: str) -> str:
 
     if not response.ok:
         log.warning(f'Error with {uri}')
-        return 'URI_ERROR'
+        return viaf_name_cache.write_and_return_response(uri, 'NOT_FOUND')
 
     # Parse the JSON response
     response_json: dict[str, Any] = response.json()
+    if response_json.get('redirect'):
+        try:
+            redirect_id = response_json['redirect']['directto']
+        except KeyError:
+            log.warning(f'Problem following redirect for {uri}')
+            return viaf_name_cache.write_and_return_response(uri, 'NOT_FOUND')
+        redirect_uri = f'http://viaf.org/viaf/{redirect_id}'
+        return viaf_name_cache.write_and_return_response(uri, get_viaf_name(redirect_uri))
     main_headings: dict[str, Any] = response_json.get('mainHeadings', {})
     data: list[dict[str, Any]] | dict[str, Any] = main_headings.get('data', [])
 
@@ -602,8 +616,7 @@ def get_viaf_name(uri: str) -> str:
                 return viaf_name_cache.write_and_return_response(uri, name)
             
     log.warning(f'Unable to find name for ``{uri}``')
-    viaf_name_cache[uri] = 'NOT_FOUND'
-    return 'URI_ERROR'
+    return viaf_name_cache.write_and_return_response(uri, 'NOT_FOUND')
 
 def get_unique_values_from_column(column: pd.Series) -> set[str]:
     """
