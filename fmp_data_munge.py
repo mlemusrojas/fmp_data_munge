@@ -7,6 +7,8 @@ from typing import Callable, Optional, Dict, Any
 from dataclasses import dataclass
 import requests
 import time
+import json
+import atexit
 
 from tqdm import tqdm, tqdm_pandas
 import pandas as pd
@@ -78,6 +80,23 @@ class FormattedOutput:
     kwargs: Optional[Dict[str, str]] = None
 
 class RateLimiter:
+    """
+    A class to rate limit API calls to different domains
+
+    Attributes:
+        rate_limits (Dict[str, float]): A dictionary of rate limits for different domains
+        last_api_call_times (Dict[str, float]): A dictionary of the last time an API call was made to each domain
+
+    Example:
+        ```
+        rate_limiter = RateLimiter({
+            'lc': 1,
+            'viaf': 1
+        })
+        rate_limiter.rate_limit_api_call('lc')
+        ```
+    """
+
     def __init__(self, rate_limits):
         self.rate_limits = rate_limits
         self.last_api_call_times = {domain: 0.0 for domain in rate_limits}
@@ -91,6 +110,90 @@ class RateLimiter:
             log.debug(f'Rate limiting API call to {domain} for {rest_time} seconds')
             time.sleep(rest_time)
         self.last_api_call_times[domain] = time.time()
+
+class LocalCache:
+    """
+    A class to handle retrieving and storing responses from API calls to local
+    files to avoid making redundant calls
+
+    Attributes:
+        cache_file (str): The path to the cache file
+        cache (Dict[str, Any]): The cache dictionary
+
+    Example:
+        ```
+        cache = LocalCache('cache.json')
+        cache.set_response('http://example.com', 'response')
+        response = cache.get_response('http://example.com')
+        ```
+    """
+
+    def __init__(self, cache_file):
+        self.cache_file = cache_file
+        self.cache = self.load_cache()
+        self.counter = 0
+        atexit.register(self.save_cache)
+
+    def load_cache(self):
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                print(f'''Error loading cache file {self.cache_file},
+                      make sure it is a valid JSON file''')
+                log.error(f'Error loading cache file {self.cache_file}')
+                # Ask the user if they want to exit or continue without the cache
+                exit = input('Do you want to proceed without the cache? (y/n) ')
+                if exit.lower() == 'y':
+                    return {}
+                else:
+                    sys.exit()
+        return {}
+
+    def save_cache(self):
+        try:
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.cache, f, indent=4)
+        except Exception as e:
+            log.error(f'Error saving cache file {self.cache_file}: {e}')
+
+    def get_response(self, key):
+        return self.cache.get(key, None)
+    
+    def set_response(self, key, response):
+        self.cache[key] = response
+        self.counter += 1
+        # Save the cache every 10 API calls
+        if self.counter >= 10:
+            log.debug(f'Saving cache after {self.counter} API calls')
+            self.counter = 0
+            self.save_cache()
+
+    def write_and_return_response(self, key, response):
+        self.set_response(key, response)
+        return response
+
+    def clear_cache(self):
+        self.cache = {}
+        self.counter = 0 # Reset the counter to 0
+        self.save_cache()
+
+    def __contains__(self, key):
+        return key in self.cache
+    
+    def __getitem__(self, key):
+        return self.get_response(key)
+    
+    def __setitem__(self, key, value):
+        self.set_response(key, value)
+    
+    def __str__(self):
+        return str(self.cache)
+    
+    def __repr__(self):
+        return repr(self.cache)
+
 #endregion
 
 #region FUNCTIONS
@@ -365,6 +468,11 @@ rate_limiter = RateLimiter({
     'viaf': 1
 })
 
+# Initialize the local caches
+lc_subject_cache = LocalCache('lc_subject_cache.json')
+lc_name_type_cache = LocalCache('lc_name_type_cache.json')
+viaf_name_cache = LocalCache('viaf_name_cache.json')
+
 def lc_get_subject_uri(subject_term: str) -> str | None:
     """
     Call the Library of Congress API to get the URI for a subject term
@@ -375,6 +483,12 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
     Returns:
         str: The URI of the subject term or None if not found
     """
+    log.debug(f'entering lc_get_subject_uri')
+
+    # Check the local cache
+    if subject_term in lc_subject_cache:
+        return lc_subject_cache[subject_term]
+
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('lc')
 
@@ -382,8 +496,9 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
     if response.ok:
         url = response.url
         if url.endswith('.json'):
-            return url[:-5]
-        return url
+            url = url[:-5]
+        return lc_subject_cache.write_and_return_response(subject_term, url)
+
     return None
 
 def lc_get_name_type(uri: str) -> str | None:
@@ -397,6 +512,10 @@ def lc_get_name_type(uri: str) -> str | None:
         str: The type of the name or None if not found
     """
     log.debug(f'entering lc_get_name_type')
+
+    # Check the local cache
+    if uri in lc_name_type_cache:
+        return lc_name_type_cache[uri]
 
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('lc')
@@ -414,15 +533,15 @@ def lc_get_name_type(uri: str) -> str | None:
         if not name_types:
             return None
         if "http://www.loc.gov/mads/rdf/v1#CorporateName" in name_types:
-            return 'Corporate'
+            return lc_name_type_cache.write_and_return_response(uri, 'Corporate')
         elif "http://www.loc.gov/mads/rdf/v1#PersonalName" in name_types:
-            return 'Personal'
+            return lc_name_type_cache.write_and_return_response(uri, 'Personal')
     else:
         log.warning(f'LC API call failed for ```{uri}```, {response.status_code = }')
         
     return None
 
-def get_viaf_name(uri: str) -> str | None:
+def get_viaf_name(uri: str) -> str:
     """
     Call the VIAF API to get the name of a person or organization
 
@@ -434,24 +553,38 @@ def get_viaf_name(uri: str) -> str | None:
     """
     log.debug(f'entering get_viaf_name')
 
+    # Check the local cache
+    if uri in viaf_name_cache:
+        return viaf_name_cache[uri]
+
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('viaf')
 
     response = requests.get(f'{uri}/viaf.json')
-    if response.ok:
-        response_json: dict[str, Any] = response.json()
-        main_headings: dict[str, Any] = response_json.get('mainHeadings', {})
-        data: list[dict[str, Any]] | dict[str, Any] = main_headings.get('data', [])
-        if isinstance(data, dict):
-            data = [data]
-        for d in data:
-            try:
-                sources = d.get('sources', None)
-            except AttributeError:
-                log.warning(f'Error with {uri}')
-                raise
-            if 'LC' in sources['s']:
-                return d.get('text', None)
+
+    if not response.ok:
+        log.warning(f'Error with {uri}')
+        return 'URI_ERROR'
+
+    # Parse the JSON response
+    response_json: dict[str, Any] = response.json()
+    main_headings: dict[str, Any] = response_json.get('mainHeadings', {})
+    data: list[dict[str, Any]] | dict[str, Any] = main_headings.get('data', [])
+
+    # Sometimes the data is a single dictionary, instead of a list of dictionaries
+    if isinstance(data, dict):
+        data = [data]
+    for d in data:
+        try:
+            sources = d.get('sources', None)
+        except AttributeError:
+            log.warning(f'Error with {uri}')
+            raise
+        if 'LC' in sources['s']:
+            name = d.get('text', None)
+            if name:
+                return viaf_name_cache.write_and_return_response(uri, name)
+            
     log.warning(f'Unable to find name for ``{uri}``')
     return 'URI_ERROR'
 
@@ -635,7 +768,7 @@ def main():
     
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
-    print('Adding the namePersonOtherVIAF column. This will take a while as it requires an API call for each row.')
+    print('Adding the namePersonOtherVIAF column. This could take a while as it requires an API call for each new VIAF URI.')
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
                         kwargs={'uri': 'Authority URI'}),
@@ -664,7 +797,7 @@ def main():
     new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
     # Make the nameType column
-    print('Adding the (temporary) Name Type column. This will take a while as it requires an API call for each LCNAF URI.')
+    print('Adding the (temporary) Name Type column. This could take a while as it requires an API call for each new LCNAF URI.')
     new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, args=('URI', 'Source'), axis=1) # type: ignore
     print('Finished adding the Name Type column')
 
@@ -705,7 +838,7 @@ def main():
     new_df: pd.DataFrame = new_df.apply(add_nameCorpCreatorLocal_column, axis=1)
 
     # Add the subjectTopicsLC and subjectTopicsLocal columns MARK: subjectTopicsLC, subjectTopicsLocal
-    print('Adding subjectTopicsLC and subjectTopicsLocal columns (hitting LC API for each unique subject term)')
+    print('Adding subjectTopicsLC and subjectTopicsLocal columns (hitting LC API for each new unique subject term)')
     unique_subjects = get_unique_values_from_column(new_df['Subject Heading'])
     uri_dict = build_uri_dict(unique_subjects, lc_get_subject_uri)
     new_df: pd.DataFrame = new_df.apply(add_subjectTopics, args=(uri_dict,), axis=1)
