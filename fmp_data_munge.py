@@ -479,7 +479,7 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
         subject_term_correct_case = subject_term[0].upper() + subject_term[1:].lower()
     else:
         subject_term_correct_case = subject_term
-        
+
     if subject_term != subject_term_correct_case:
         log.debug(f'Correcting case for {subject_term} to {subject_term_correct_case} for API call')
 
@@ -760,7 +760,8 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
 def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_file', help='The path to the input CSV file')
+    parser.add_argument('fmp_file', help='The path to the input CSV file')
+    parser.add_argument('student_file', help='The path to the "student spreadsheet" CSV file')
     parser.add_argument('output_file', help='''The path to the output CSV file. 
                         Will be created if it does not exist. Will overwrite if
                          it does. Default is ../output/processed_data.csv''',
@@ -773,7 +774,19 @@ def main():
 
 
 
+    # Read the CSV files
     fmp_df: pd.DataFrame = read_csv(args.fmp_file)
+    student_df: pd.DataFrame = read_csv(args.student_file)
+
+    # MARK: NEW WORK
+
+
+
+
+
+
+
+
     
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
