@@ -202,22 +202,20 @@ class LocalCache:
 # =============================================================================
 
 
-def read_csv(file_path: str) -> list[list[str]]:
+def read_csv(file_path: str) -> pd.DataFrame:
     """
-    Read a CSV file and return the data as a list of lists
+    Read a CSV file and return the data as a pandas DataFrame
 
     Args:
         file_path (str): The path to the CSV file
 
     Returns:
-        list[list[str]]: The data from the CSV file
+        pd.DataFrame: The data from the CSV file
     """
 
-    with open(file_path, 'r') as f:
-        reader = csv.reader(f)
-        data = [row for row in reader]
-        log.info(f'Read {len(data)} rows from {file_path}')
-        return data
+    df = pd.read_csv(file_path)
+    log.info(f'Read DataFrame with {len(df)} rows and {len(df.columns)} columns from {file_path}')
+    return df
     
 def write_csv(data: pd.DataFrame, file_path: str):
     """
@@ -230,23 +228,6 @@ def write_csv(data: pd.DataFrame, file_path: str):
 
     data.to_csv(file_path, index=False)
     log.info(f'Wrote data to {file_path}')
-    
-def make_df(data: list[list[str]]) -> pd.DataFrame:
-    """
-    Create a pandas DataFrame from a list of lists
-    
-    Args:
-        data (list[list[str]]): The data to be converted to a DataFrame,
-            in the format created by the read_csv function
-        
-    Returns:
-        pd.DataFrame: The pandas DataFrame
-    """
-
-    df = pd.DataFrame(data[1:], columns=data[0])
-    # print(df.info())
-    log.info(f'Created DataFrame with {len(df)} rows and {len(df.columns)} columns')
-    return df
 
 def create_authority_name(**fields) -> str:
     """
@@ -792,9 +773,7 @@ def main():
 
 
 
-    # Read the CSV file
-    data:list[list[str]] = read_csv(args.input_file)
-    df: pd.DataFrame = make_df(data)
+    fmp_df: pd.DataFrame = read_csv(args.fmp_file)
     
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
