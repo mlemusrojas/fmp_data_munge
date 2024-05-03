@@ -213,8 +213,10 @@ def read_csv(file_path: str) -> pd.DataFrame:
         pd.DataFrame: The data from the CSV file
     """
 
-    df = pd.read_csv(file_path)
-    log.info(f'Read DataFrame with {len(df)} rows and {len(df.columns)} columns from {file_path}')
+    df: pd.DataFrame = pd.read_csv(file_path, dtype='string')
+    # df = pd.read_csv(file_path, dtype=str)
+    log.info(f'''Read DataFrame with {len(df)} rows and {len(df.columns)} 
+             columns from {file_path}''')
     return df
     
 def write_csv(data: pd.DataFrame, file_path: str):
@@ -228,6 +230,47 @@ def write_csv(data: pd.DataFrame, file_path: str):
 
     data.to_csv(file_path, index=False)
     log.info(f'Wrote data to {file_path}')
+
+# MARK: STUDENT SPREADSHEET FUNCTIONS
+
+def clean_student_spreadsheet(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean the student spreadsheet by removing unnecessary columns and rows
+    
+    Args:
+        df (pd.DataFrame): The student spreadsheet DataFrame
+
+    Returns:
+        pd.DataFrame: The cleaned student spreadsheet DataFrame
+    """
+
+    # Remove 2nd row
+    df = df.iloc[1:]
+
+    # Remove all columns except:
+    '''
+    HH ID, # of folders\ngoing to vendor, dateText, PERMANENT BOX NUMBER(S)
+    '''
+    columns_to_keep = ['HH ID', 
+                       '# of folders\ngoing to vendor', 
+                       'dateText', 
+                       'PERMANENT BOX NUMBER(S)' 
+                       ]
+    df = df[columns_to_keep]
+
+    # Rename columns
+    df.columns = ['ss_HH ID', 'ss_Number of Folders', 
+                  'ss_DateText', 'ss_Box Numbers']
+
+    log.info(f'''Cleaned student spreadsheet with {len(df)} rows 
+             and {len(df.columns)} columns''')    
+
+    return df
+
+def get_min_max_dates(col_value: str) -> tuple[str, str]:
+    raise NotImplementedError
+
+
 
 def create_authority_name(**fields) -> str:
     """
@@ -255,7 +298,8 @@ def create_authority_name(**fields) -> str:
     role_uri_merge = ' '.join([ i for i in [role, uri] if i])
     return ', '.join([i for i in [name, date, role_uri_merge] if i])
 
-def create_formatted_date(start_date: str | None, end_date: str | None) -> str | None:
+def create_formatted_date(start_date: str | None, 
+                          end_date: str | None) -> str | None:
     """
     Create a date range in 'YYYY - YYYY' format from a start date and an end date,
     or a single date if only one is provided
@@ -314,7 +358,8 @@ def reduce_list(values: str, flags: list[bool]) -> str:
         str: The reduced list of values
     """
 
-    return '|'.join([value for value, flag in zip(values.split('|'), flags) if flag])
+    return '|'.join([value for value, flag in 
+                     zip(values.split('|'), flags) if flag])
 
 def process_row(row: pd.Series,
                 new_column_name: str, 
@@ -780,6 +825,23 @@ def main():
 
     # MARK: NEW WORK
 
+    # Clean the student spreadsheet
+    student_df = clean_student_spreadsheet(student_df)
+
+    # Print the student columns
+    print(student_df.columns)
+    print(student_df.head())
+    print(student_df.info())
+
+    # Replace null values with empty strings
+    student_df = student_df.fillna('')
+
+    # Use groupby to concatenate the values in each column for each HH ID
+    student_df = student_df.groupby('ss_HH ID').agg(lambda x: '|'.join(x))
+    
+    print(student_df.head())
+
+    sys.exit()
 
 
 
