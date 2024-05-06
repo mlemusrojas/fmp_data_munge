@@ -225,19 +225,43 @@ def read_csv(file_path: str) -> pd.DataFrame:
     
 def write_csv(data: pd.DataFrame, file_path: str):
     """
-    Write a pandas DataFrame to a CSV file
+    Write a pandas DataFrame to a CSV file, write the index as the 
+    first column
 
     Args:
         data (pd.DataFrame): The data to write to the CSV file
         file_path (str): The path to the CSV file
     """
 
-    data.to_csv(file_path, index=False)
+    data.to_csv(file_path, index=True)
     log.info(f'Wrote data to {file_path}')
 
 # MARK: STUDENT SPREADSHEET FUNCTIONS
 
-def clean_student_spreadsheet(df: pd.DataFrame) -> pd.DataFrame:
+def remove_orgs(student_df: pd.DataFrame, orgs_file_path: str) -> pd.DataFrame:
+    """
+    Removes all orgs not in the orgs list from the student spreadsheet
+
+    Args:
+        student_df (pd.DataFrame): The student spreadsheet DataFrame
+        orgs_file_path (str): The path to the orgs list txt file
+
+    Returns:
+        pd.DataFrame: The student spreadsheet DataFrame with orgs removed
+    """
+    with open(orgs_file_path, 'r') as f:
+        orgs = f.read().splitlines()
+    log.info(f'Read orgs list with {len(orgs)} orgs from {orgs_file_path}')
+
+    print(f'{orgs[:10] = }')
+    # Filter out rows with orgs not in the orgs list
+    student_df = student_df[student_df['ss_HH ID'].isin(orgs)]
+    log.info(f'Filtered out orgs not in the orgs list, '
+            f'remaining rows: {len(student_df)}')
+
+    return student_df
+
+def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) -> pd.DataFrame:
     """
     Clean the student spreadsheet by removing unnecessary columns and rows
     
@@ -275,11 +299,18 @@ def clean_student_spreadsheet(df: pd.DataFrame) -> pd.DataFrame:
         # Remove rows with null or blank ss_HH ID
         df = df[~df['ss_HH ID'].isnull() & (df['ss_HH ID'] != '')]
 
+    # Replace HH###### with HH_###### for compatibility with FMP data
+    df['ss_HH ID'] = df['ss_HH ID'].map(lambda x: x.replace('HH', 'HH_'))
+
+    # Remove rows not specified in the orgs list
+    if orgs_file:
+        df = remove_orgs(df, orgs_file)
+
     # Replace null values with empty strings
     df = df.fillna('')
 
     # Strip leading and trailing whitespace from all columns
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x) # type: ignore
+    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
 
     # Print and log a warning about any rows with non-numeric values 
     # in ss_Number of Folders
@@ -494,8 +525,8 @@ def create_start_end_date(row: pd.Series) -> pd.Series:
         start_date, end_date = row['ss_DateText'].split('-')
     else:
         start_date = end_date = row['ss_DateText']
-    row['Start Date'] = start_date
-    row['End Date'] = end_date
+    row['dateStart'] = start_date
+    row['dateEnd'] = end_date
     return row
 
 def create_authority_name(**fields) -> str:
@@ -648,7 +679,9 @@ def process_row(row: pd.Series,
     if mask_column and mask_value:
         log.debug(f'{mask_column = }, {mask_value = }')
         values_to_process = ([True if i.lower() == mask_value.lower() 
-                              else False for i in row[mask_column].split('|')])
+                              else False for i in 
+                              str(row[mask_column]).split('|')] if 
+                              pd.notna(row[mask_column]) else [False])
         log.debug(f'{values_to_process = }')
     else:
         values_to_process = [True] * len(row)
@@ -1082,6 +1115,9 @@ def main():
                         Will be created if it does not exist. Will overwrite if
                          it does. Default is ../output/processed_data.csv''',
                         default='../output/processed_data.csv')
+    parser.add_argument('orgs_file', help='The path to the txt file '
+                        'containing the list of organizations to include. If '
+                        'not provided, all organizations will be included.')
     args = parser.parse_args()
     log.info(f'successfully parsed args, ``{args}``')
 
@@ -1092,10 +1128,10 @@ def main():
     fmp_df: pd.DataFrame = read_csv(args.fmp_file)
     student_df: pd.DataFrame = read_csv(args.student_file)
 
-    # MARK: NEW WORK
+    # MARK: Student Spreadsheet
 
     # Clean the student spreadsheet
-    student_df = clean_student_spreadsheet(student_df)
+    student_df = clean_student_spreadsheet(student_df, args.orgs_file)
 
     # Print the student columns
     print(student_df.columns)
@@ -1124,15 +1160,30 @@ def main():
     print('After create_start_end_date')
     print(student_df.head(50))
 
-    sys.exit()
+    # Perform a left join on the student data with the FMP data
+    # ie. keep all rows from the student data and only matching rows from the 
+    # FMP data
+    df: pd.DataFrame = pd.merge(student_df, fmp_df, how='left',
+                                left_on='ss_HH ID', right_on='Organization ID')
 
+    # Rename ss_HH ID to Organization ID and make it the index
+    df = df.drop(columns=['Organization ID'])
+    df = df.rename(columns={'ss_HH ID': 'Organization ID'})
+    df = df.set_index('Organization ID')
 
+    # Rename ss_Number of Folders to 'Extent Size'
+    df = df.rename(columns={'ss_Number of Folders': 'Extent Size'})
+    # Rename ss_DateText to 'dateText'
+    df = df.rename(columns={'ss_DateText': 'dateText'})
+    # Rename ss_Box Numbers to 'shelfLocator1'
+    df = df.rename(columns={'ss_Box Numbers': 'shelfLocator1'})
 
+    print('After merge')
+    print(df.head(50))
 
+    # Convert NA values to empty strings
+    df = df.fillna('')
 
-
-
-    
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
     print('Adding the namePersonOtherVIAF column. This could take a while as it requires an API call for each new VIAF URI.')
