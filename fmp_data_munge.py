@@ -236,6 +236,16 @@ def write_csv(data: pd.DataFrame, file_path: str):
     data.to_csv(file_path, index=True)
     log.info(f'Wrote data to {file_path}')
 
+def press_c_to_continue():
+    """
+    Pause the program and prompt the user to press 'c' to continue
+    """
+
+    input_val = input("Enter 'c' to continue, or any other key to exit: ")
+    if input_val.lower() != 'c':
+        log.info('User chose to exit')
+        sys.exit('Exiting...')
+
 # MARK: STUDENT SPREADSHEET FUNCTIONS
 
 def remove_orgs(student_df: pd.DataFrame, orgs_file_path: str) -> pd.DataFrame:
@@ -253,7 +263,6 @@ def remove_orgs(student_df: pd.DataFrame, orgs_file_path: str) -> pd.DataFrame:
         orgs = f.read().splitlines()
     log.info(f'Read orgs list with {len(orgs)} orgs from {orgs_file_path}')
 
-    print(f'{orgs[:10] = }')
     # Filter out rows with orgs not in the orgs list
     student_df = student_df[student_df['ss_HH ID'].isin(orgs)]
     log.info(f'Filtered out orgs not in the orgs list, '
@@ -271,6 +280,9 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     Returns:
         pd.DataFrame: The cleaned student spreadsheet DataFrame
     """
+
+    # Print 'Beginning importing student spreadsheet' in green text
+    print('\033[92m' + 'Beginning importing student spreadsheet' + '\033[0m')
 
     # Remove 2nd row
     df = df.iloc[1:]
@@ -294,8 +306,9 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     rows_with_null_hh_id = df[df['ss_HH ID'].isnull() | (df['ss_HH ID'] == '')]
     if not rows_with_null_hh_id.empty:
         log.warning(f'Rows with null or blank ss_HH ID: {rows_with_null_hh_id}')
-        print(f'{red_warning}: Rows with null or blank ss_HH ID: \n'
+        print(f'{red_warning}: Rows with null or blank HH ID: \n'
               f'{rows_with_null_hh_id}')
+        press_c_to_continue()
         # Remove rows with null or blank ss_HH ID
         df = df[~df['ss_HH ID'].isnull() & (df['ss_HH ID'] != '')]
 
@@ -320,11 +333,10 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
                     f'{len(non_numeric_folders)}')
         # Use red text to make the warning stand out
         print(f'{red_warning}: Rows with non-numeric ss_Number of Folders:')
-        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        print(f'HH ID\t\t# of folders')
         if len(non_numeric_folders) <= 10:
             for i, row in non_numeric_folders.iterrows():
-                print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
-                    f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+                print(f'{row["ss_HH ID"]}\t\t{row["ss_Number of Folders"]}')
         else:
             # Separate out the rows with blank values
             blank_folders = (
@@ -341,6 +353,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
                           f'more rows with non-numeric values')
                     break
             print(f'... and {len(blank_folders)} more rows with blank values')
+        press_c_to_continue()
 
     # Print and log a warning about any rows where ss_Number of Folders is 
     # likely a year (4 digits) instead of a number
@@ -349,11 +362,11 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
         log.warning(f'Rows with likely years in ss_Number of Folders: '
                     f'{len(likely_years)}')
         print(f'{red_warning}: Rows with likely years in ss_Number of Folders:')
-        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        print(f'HH ID\t# of folders')
         for i, row in likely_years.iterrows():
-            print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
-                f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+            print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}')
         print(f'{red_warning}: These will be included in the sum if left as is')
+        press_c_to_continue()
 
     # Print and log a warning about any rows where ss_Box Numbers appears to
     # be a date
@@ -363,11 +376,11 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
         log.warning(f'Rows with likely dates in ss_Box Numbers: '
                     f'{len(likely_dates)}')
         print(f'{red_warning}: Rows with likely dates in ss_Box Numbers:')
-        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        print(f'HH ID\tPERMANENT BOX NUMBER(S)')
         for i, row in likely_dates.iterrows():
-            print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
-                f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
-        print(f'{red_warning}: These will be excluded.')   
+            print(f'{row["ss_HH ID"]}\t{row["ss_Box Numbers"]}')
+        print(f'{red_warning}: These will be excluded.')
+        press_c_to_continue() 
 
     return df
 
@@ -1128,18 +1141,12 @@ def main():
     fmp_df: pd.DataFrame = read_csv(args.fmp_file)
     student_df: pd.DataFrame = read_csv(args.student_file)
 
+    print('\n\n\n')
+
     # MARK: Student Spreadsheet
 
     # Clean the student spreadsheet
     student_df = clean_student_spreadsheet(student_df, args.orgs_file)
-
-    # Print the student columns
-    print(student_df.columns)
-    print(student_df.head())
-    print(student_df.info())
-
-    print('Before groupby')
-    print(student_df.head(50))
 
     # Use groupby to combine the values in each column for each HH ID
     # Each column needs to be combined in a different way
@@ -1150,15 +1157,9 @@ def main():
     }
     student_df = (student_df.groupby('ss_HH ID').
                   aggregate(aggregation_functions).reset_index())
-    
-    print('After groupby')
-    print(student_df.head(50))
 
     # Create the 'Start Date' and 'End Date' columns
     student_df = student_df.apply(create_start_end_date, axis=1)
-
-    print('After create_start_end_date')
-    print(student_df.head(50))
 
     # Perform a left join on the student data with the FMP data
     # ie. keep all rows from the student data and only matching rows from the 
@@ -1178,11 +1179,14 @@ def main():
     # Rename ss_Box Numbers to 'shelfLocator1'
     df = df.rename(columns={'ss_Box Numbers': 'shelfLocator1'})
 
-    print('After merge')
-    print(df.head(50))
-
     # Convert NA values to empty strings
     df = df.fillna('')
+
+    print('\033[92m' + 'Finished merging FMP data with student spreadsheet'
+           + '\033[0m')
+    print('\n')
+    print('\033[92m' + 'Beginning to add columns to the merged data' 
+          + '\033[0m')
 
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
@@ -1295,7 +1299,7 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     write_csv(new_df, args.output_file)
-    print('Done!')
+    print('\033[92m' + 'Done!' + '\033[0m')
 #endregion
 
 #region DUNDER MAIN
