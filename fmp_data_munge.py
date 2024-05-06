@@ -13,6 +13,7 @@ import atexit
 from tqdm import tqdm, tqdm_pandas
 import pandas as pd
 from dotenv import load_dotenv, find_dotenv
+import re
 #endregion
 
 # Load environment variables. If no .env exists, use default values
@@ -49,6 +50,9 @@ ch.setFormatter(logging.Formatter(
 ))
 log.addHandler(ch)
 #endregion
+
+# Create the text 'WARNING' in red as a variable
+red_warning = '\033[91mWARNING\033[0m'
 
 #region CLASSES
 
@@ -261,16 +265,238 @@ def clean_student_spreadsheet(df: pd.DataFrame) -> pd.DataFrame:
     # Rename columns
     df.columns = ['ss_HH ID', 'ss_Number of Folders', 
                   'ss_DateText', 'ss_Box Numbers']
+    
+    # Print a warning about any rows with null or blank ss_HH ID
+    rows_with_null_hh_id = df[df['ss_HH ID'].isnull() | (df['ss_HH ID'] == '')]
+    if not rows_with_null_hh_id.empty:
+        log.warning(f'Rows with null or blank ss_HH ID: {rows_with_null_hh_id}')
+        print(f'{red_warning}: Rows with null or blank ss_HH ID: \n'
+              f'{rows_with_null_hh_id}')
+        # Remove rows with null or blank ss_HH ID
+        df = df[~df['ss_HH ID'].isnull() & (df['ss_HH ID'] != '')]
 
-    log.info(f'''Cleaned student spreadsheet with {len(df)} rows 
-             and {len(df.columns)} columns''')    
+    # Replace null values with empty strings
+    df = df.fillna('')
+
+    # Strip leading and trailing whitespace from all columns
+    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x) # type: ignore
+
+    # Print and log a warning about any rows with non-numeric values 
+    # in ss_Number of Folders
+    non_numeric_folders = df[~df['ss_Number of Folders'].str.isnumeric()]
+    if not non_numeric_folders.empty:
+        log.warning(f'Rows with non-numeric ss_Number of Folders: '
+                    f'{len(non_numeric_folders)}')
+        # Use red text to make the warning stand out
+        print(f'{red_warning}: Rows with non-numeric ss_Number of Folders:')
+        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        if len(non_numeric_folders) <= 10:
+            for i, row in non_numeric_folders.iterrows():
+                print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
+                    f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+        else:
+            # Separate out the rows with blank values
+            blank_folders = (
+                non_numeric_folders[non_numeric_folders['ss_Number of Folders']
+                                     == ''])
+            non_blank_folders = (
+                non_numeric_folders[non_numeric_folders['ss_Number of Folders']
+                                     != ''])
+            for i, (_, row) in enumerate(non_blank_folders.iterrows()):
+                print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
+                    f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+                if i > 9:
+                    print(f'... and {len(non_blank_folders) - 10} '
+                          f'more rows with non-numeric values')
+                    break
+            print(f'... and {len(blank_folders)} more rows with blank values')
+
+    # Print and log a warning about any rows where ss_Number of Folders is 
+    # likely a year (4 digits) instead of a number
+    likely_years = df[df['ss_Number of Folders'].str.len() >= 4]
+    if not likely_years.empty:
+        log.warning(f'Rows with likely years in ss_Number of Folders: '
+                    f'{len(likely_years)}')
+        print(f'{red_warning}: Rows with likely years in ss_Number of Folders:')
+        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        for i, row in likely_years.iterrows():
+            print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
+                f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+        print(f'{red_warning}: These will be included in the sum if left as is')
+
+    # Print and log a warning about any rows where ss_Box Numbers appears to
+    # be a date
+    likely_dates = df[df['ss_Box Numbers'].str.contains(r'\d{1,2}-\w{3}', 
+                                                        na=False)]
+    if not likely_dates.empty:
+        log.warning(f'Rows with likely dates in ss_Box Numbers: '
+                    f'{len(likely_dates)}')
+        print(f'{red_warning}: Rows with likely dates in ss_Box Numbers:')
+        print(f'HH ID\t# of folders\tdateText\tPERMANENT BOX NUMBER(S)')
+        for i, row in likely_dates.iterrows():
+            print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}\t'
+                f'{row["ss_DateText"]}\t{row["ss_Box Numbers"]}')
+        print(f'{red_warning}: These will be excluded.')   
 
     return df
 
-def get_min_max_dates(col_value: str) -> tuple[str, str]:
-    raise NotImplementedError
+def sum_folders(col_values: pd.Series) -> str:
+    """
+    Custom function for use with pandas groupby to sum the values of an org
+    Sum the values and add 'folder' or 'folders' based on the sum
+    
+    Args:
+        col_values (pd.Series): The column values to sum
+        
+    Returns:
+        str: The sum of the values with 'folder' or 'folders'
+    """
+    
+    # Convert the values to integers, or 0 if they are not numbers
+    values = [int(i) if i.isnumeric() else 0 for i in col_values]
+    total = sum(values)
+    if total == 1:
+        return f'{total} folder'
+    return f'{total} folders'
 
+def is_valid_date(value_to_check: str) -> bool:
+    """
+    Simply uses pandas.to_datetime to check if a value is a valid date
 
+    Args:
+        date (str): The date to check
+
+    Returns:
+        bool: True if the date is valid, False if not
+    """
+
+    try:
+        pd.to_datetime(value_to_check)
+        return True
+    except ValueError:
+        return False
+
+def get_min_max_dates(col_value: pd.Series) -> str:
+    """
+    Custom function for use with pandas groupby to get the min and max dates
+    from all the dates listed for an org
+
+    Args:
+        col_value (pd.Series): The column values to process
+
+    Returns:
+        str: The min and max dates, separated by a hyphen; a single date; 
+        or an empty string if no dates are found
+
+    Example:
+        input: '1970,1980,1975'
+        output: '1970-1980'
+    """
+    # Make a list of all the values
+    values: list[str] = col_value.tolist()
+    # Split each value into a list of dates
+    dates: list[list[str]] = [value.split(',') for value in values]
+    # Flatten the list of lists
+    flat_dates: list[str] = [date for sublist in dates for date in sublist]
+    # Split ranges into individual dates
+    split_dates: list[list[str]] = [date.split('-') for date in flat_dates]
+    # Flatten the list of lists
+    flat_dates = [date for sublist in split_dates for date in sublist]
+    # Strip leading and trailing whitespace from each date
+    stripped_dates: list[str] = [date.strip() for date in flat_dates]
+    # Filter out empty strings
+    non_empty_dates: list[str] = [date for date in stripped_dates if date]
+    # Filter out values that can't be converted to dates using datetime
+    valid_dates: list[str] = [date for date in non_empty_dates if is_valid_date(date)]
+    # Convert the dates to datetime objects
+    date_objects: list[pd.Timestamp] = [pd.to_datetime(date) for date in valid_dates]
+    if not date_objects:
+        return ''
+    # Get the min and max dates
+    min_date: pd.Timestamp = min(date_objects)
+    max_date: pd.Timestamp = max(date_objects)
+    # Format the dates
+    if min_date != max_date:
+        return f'{min_date.year}-{max_date.year}'
+    return f'{min_date.year}'
+
+def compile_box_numbers(col_value: pd.Series) -> str:
+    """
+    Custom function for use with pandas groupby to compile all the box numbers
+    in a designated format. It splits between group 1 and group 2 box numbers
+
+    Args:
+        col_value (pd.Series): The column values to process
+
+    Returns:
+        str: The compiled box numbers
+
+    Example:
+        input: 'U-9, 18-5, U-12'
+        output: 'Part 1: 18-5; Part 2: U-9, U-12'
+    """
+    # Split the values into a list
+    values: list[str] = col_value.tolist()
+    # Split each value into a list of box numbers
+    box_numbers: list[list[str]] = [value.split(',') for value in values]
+    # Flatten the list of lists
+    flat_box_numbers: list[str] = [box for sublist in box_numbers 
+                                   for box in sublist]
+    # Strip leading and trailing whitespace from each box number
+    stripped_box_numbers: list[str] = [box.strip() for box in flat_box_numbers]
+    # Filter out empty strings
+    non_empty_box_numbers: list[str] = [box for box 
+                                        in stripped_box_numbers if box]
+    # Split the box numbers into two groups
+    part_1: list[str] = []
+    part_2: list[str] = []
+    for box in non_empty_box_numbers:
+        # Part 1 box numbers are in the format '##-#' or '##.##-#'
+        if re.match(r'^\d{1,2}(?:\.\d{1,2})?-\d{1,3}$', box):
+            part_1.append(box)
+        # Part 2 box numbers are in the format 'AtoZ-#'
+        elif re.match(r'^[A-Z]{1,2}-\d{1,3}$', box):
+            part_2.append(box)
+        elif not re.match(r'^\d{1,2}-\w{3}$', box):
+            log.warning(f'Invalid box number format: {box}')
+            print(f'{red_warning}: Invalid box number format: {box}')
+    # Sort the box numbers
+    part_1.sort()
+    part_2.sort()
+    # Format the box numbers
+    part_1_str: str = f'Part 1: {", ".join(part_1)}' if part_1 else ''
+    part_2_str: str = f'Part 2: {", ".join(part_2)}' if part_2 else ''
+    if part_1_str and part_2_str:
+        return f'{part_1_str}; {part_2_str}'
+    # Return whichever part is not empty, or an empty string if both are empty
+    return part_1_str or part_2_str
+
+def create_start_end_date(row: pd.Series) -> pd.Series:
+    """
+    Creates two new columns in the DataFrame, 'Start Date' and 'End Date',
+    based on the 'ss_DateText' column
+
+    Args:
+        row (pd.Series): The row to process
+
+    Returns:
+        pd.Series: The processed row
+
+    Examples:
+        input: ss_DateText='1970-1980'
+        output: Start Date='1970', End Date='1980'
+
+        input: ss_DateText='1970'
+        output: Start Date='1970', End Date='1970'
+    """
+    # Determine if the date is a range or a single date
+    if '-' in row['ss_DateText']:
+        start_date, end_date = row['ss_DateText'].split('-')
+    else:
+        start_date = end_date = row['ss_DateText']
+    row['Start Date'] = start_date
+    row['End Date'] = end_date
+    return row
 
 def create_authority_name(**fields) -> str:
     """
@@ -301,8 +527,8 @@ def create_authority_name(**fields) -> str:
 def create_formatted_date(start_date: str | None, 
                           end_date: str | None) -> str | None:
     """
-    Create a date range in 'YYYY - YYYY' format from a start date and an end date,
-    or a single date if only one is provided
+    Create a date range in 'YYYY - YYYY' format from a start date and an 
+    end date, or a single date if only one is provided
 
     Args:
         start_date (str): The start date
@@ -316,7 +542,8 @@ def create_formatted_date(start_date: str | None,
     
 def build_uri(authority: str | None, id: str | None) -> str | None:
     """
-    Build a URI from an authority and an ID. The authority can be 'lc', 'viaf', or local. If local, returns None.
+    Build a URI from an authority and an ID. The authority can be 'lc', 
+    'viaf', or local. If local, returns None.
 
     Args:
         authority (str): The authority
@@ -369,16 +596,21 @@ def process_row(row: pd.Series,
                 ) -> pd.Series:
 
     """
-    Process a row of a DataFrame to create a new column with a format specified by the FormattedOutput namedtuple
+    Process a row of a DataFrame to create a new column with a format 
+    specified by the FormattedOutput namedtuple
 
     Args:
         row (pd.Series): The row to process
-        output_format (list[FormattedOutput]): A list of FormattedOutput namedtuples specifying how to create the new column
+        output_format (list[FormattedOutput]): A list of FormattedOutput 
+            namedtuples specifying how to create the new column
         mask_column (str): The name of the column to use as a mask
-        mask_value (str): The value to use as a mask filter, only values in mask_column matching this value will be processed (case-insensitive)
+        mask_value (str): The value to use as a mask filter, only values 
+            in mask_column matching this value will be 
+            processed (case-insensitive)
 
-    Any given attribute can be None, but if using a function, the kwargs must be provided.
-    If multiple attributes are provided, they will be concatenated in the order they are provided.
+    Any given attribute can be None, but if using a function, the 
+    kwargs must be provided. If multiple attributes are provided, 
+    they will be concatenated in the order they are provided.
 
     Returns:
         pd.Series: The processed row
@@ -387,15 +619,22 @@ def process_row(row: pd.Series,
         This is a partial example of output_format for the name and date range:
         ```
         output_format = [
-            FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
-            FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
-            FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
+            FormattedOutput(text=None, 
+                            column_name='Authoritized Name', 
+                            function=None, kwargs=None),
+            FormattedOutput(text=', ', column_name=None, 
+                            function=None, kwargs=None),
+            FormattedOutput(text=None, column_name=None, 
+                            function=create_formatted_date, 
+                            kwargs={'start_date': 'Start Date', 
+                                    'end_date': 'End Date'})
         ]
         ```
 
         This is an example of using the mask_column and mask_value arguments:
         ```
-        new_df = df.apply(process_row, args=(output_format, 'Authority Used', 'viaf'), axis=1)
+        new_df = df.apply(process_row, args=(output_format, 
+                            'Authority Used', 'viaf'), axis=1)
         ```
     """
 
@@ -408,11 +647,13 @@ def process_row(row: pd.Series,
     # track the indices to process based on the mask
     if mask_column and mask_value:
         log.debug(f'{mask_column = }, {mask_value = }')
-        values_to_process = [True if i.lower() == mask_value.lower() else False for i in row[mask_column].split('|')]
+        values_to_process = ([True if i.lower() == mask_value.lower() 
+                              else False for i in row[mask_column].split('|')])
         log.debug(f'{values_to_process = }')
     else:
         values_to_process = [True] * len(row)
-        log.debug(f'No mask provided, processing all values: {values_to_process = }')
+        log.debug(f'No mask provided, processing all values: '
+                  f'{values_to_process = }')
 
     formatted_output_values: list[str] = []
 
@@ -422,7 +663,8 @@ def process_row(row: pd.Series,
             for chunk in output_format:
                 # check that function and kwargs are both provided or both None
                 if callable(chunk.function) ^ isinstance(chunk.kwargs, dict):
-                    raise ValueError("FormattedOutput must specify both 'function' and 'kwargs' or neither")
+                    raise ValueError("FormattedOutput must specify both "
+                                     "'function' and 'kwargs' or neither")
                 if chunk.text:
                     formatted_text += chunk.text
                 if chunk.column_name:
@@ -441,7 +683,8 @@ def process_row(row: pd.Series,
 def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series:
     """
     Process a row of a DataFrame to create a new column, 
-    populating it with the 'Organization Name' from the 'sources' sheet if neither 'LCNAF' nor 'VIAF' names are found.
+    populating it with the 'Organization Name' from the 'sources' sheet if 
+    neither 'LCNAF' nor 'VIAF' names are found.
 
     Args:
         row (pd.Series): The row to process
@@ -475,7 +718,8 @@ def add_nameCorpCreatorLocal_column(row: pd.Series) -> pd.Series:
     if sources_name:
         row['nameCorpCreatorLocal'] = sources_name
         return row
-    log.debug(f'No Organization Name found in Organization Name_sources, attempting to pull from Organization Name_subjects')
+    log.debug(f'No Organization Name found in Organization Name_sources, '
+              f'attempting to pull from Organization Name_subjects')
     subjects_name = row['Organization Name_subjects'].split('|')[0]
     if subjects_name:
         row['nameCorpCreatorLocal'] = subjects_name
@@ -521,20 +765,27 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
     rate_limiter.rate_limit_api_call('lc')
 
     if len(subject_term) > 1:
-        subject_term_correct_case = subject_term[0].upper() + subject_term[1:].lower()
+        subject_term_correct_case = (subject_term[0].upper() 
+                                     + subject_term[1:].lower())
     else:
         subject_term_correct_case = subject_term
 
     if subject_term != subject_term_correct_case:
-        log.debug(f'Correcting case for {subject_term} to {subject_term_correct_case} for API call')
+        log.debug(f'Correcting case for {subject_term} to '
+                  f'{subject_term_correct_case} for API call')
 
     try:
-        response = requests.head(f'https://id.loc.gov/authorities/subjects/label/{subject_term_correct_case}', allow_redirects=True)
+        response = requests.head(
+            f'https://id.loc.gov/authorities/subjects/label/'
+            f'{subject_term_correct_case}', allow_redirects=True
+            )
     except requests.exceptions.RequestException as e:
         log.error(f'Error with request: {e}')
         return None
     if response.ok:
-        return lc_subject_cache.write_and_return_response(subject_term, response.headers['x-uri'])
+        return lc_subject_cache.write_and_return_response(
+            subject_term, response.headers['x-uri']
+            )
     
     if response.status_code == 404:
         log.debug(f'No URI found for {subject_term}')
@@ -544,7 +795,8 @@ def lc_get_subject_uri(subject_term: str) -> str | None:
 
 def lc_get_name_type(uri: str) -> str | None:
     """
-    Call the Library of Congress API to get the type of a name (Personal or Corporate)
+    Call the Library of Congress API to get the type of a name 
+    (Personal or Corporate)
 
     Args:
         uri (str): The URI to search for
@@ -568,7 +820,9 @@ def lc_get_name_type(uri: str) -> str | None:
         log.debug(f'LC API call successful')
         data: list[dict[str, Any]] = response.json()
         # find the dictionary with a key of '@id' and a value of the uri
-        matching_dict: dict[str, Any] = [d for d in data if d.get('@id', None) == uri][0]
+        matching_dict: dict[str, Any] = ([d for d in data 
+                                          if d.get('@id', None) == uri][0]
+                                          )
         log.debug(f'{matching_dict = }')
         # get the values from the '@type' key
         name_types: list[str] = matching_dict.get('@type', None)
@@ -581,7 +835,8 @@ def lc_get_name_type(uri: str) -> str | None:
         elif "http://www.loc.gov/mads/rdf/v1#PersonalName" in name_types:
             return lc_name_type_cache.write_and_return_response(uri, 'Personal')
     else:
-        log.warning(f'LC API call failed for ```{uri}```, {response.status_code = }')
+        log.warning(f'LC API call failed for ```{uri}```, '
+                    f'{response.status_code = }')
 
     if response.status_code == 404:
         log.warning(f'No name found for {uri}')
@@ -623,11 +878,14 @@ def get_viaf_name(uri: str) -> str:
             log.warning(f'Problem following redirect for {uri}')
             return viaf_name_cache.write_and_return_response(uri, 'NOT_FOUND')
         redirect_uri = f'http://viaf.org/viaf/{redirect_id}'
-        return viaf_name_cache.write_and_return_response(uri, get_viaf_name(redirect_uri))
+        return viaf_name_cache.write_and_return_response(
+            uri, get_viaf_name(redirect_uri)
+            )
     main_headings: dict[str, Any] = response_json.get('mainHeadings', {})
     data: list[dict[str, Any]] | dict[str, Any] = main_headings.get('data', [])
 
-    # Sometimes the data is a single dictionary, instead of a list of dictionaries
+    # Sometimes the data is a single dictionary, 
+    # instead of a list of dictionaries
     if isinstance(data, dict):
         data = [data]
     for d in data:
@@ -646,7 +904,8 @@ def get_viaf_name(uri: str) -> str:
 
 def get_unique_values_from_column(column: pd.Series) -> set[str]:
     """
-    Get unique values from a column of a DataFrame, separating pipe-separated values
+    Get unique values from a column of a DataFrame, separating 
+    pipe-separated values
 
     Args:
         column (pd.Series): The column to process
@@ -682,8 +941,9 @@ def build_uri_dict(values: set[str], api_call: Callable) -> dict[str, str]:
 
 def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series:
     """
-    Process a row of a DataFrame to populate either subjectTopicsLC or subjectTopicsLocal columns. 
-    Populates subjectTopicsLC if an LC URI is found, subjectTopicsLocal if not.
+    Process a row of a DataFrame to populate either subjectTopicsLC or 
+    subjectTopicsLocal columns. Populates subjectTopicsLC if an LC URI 
+    is found, subjectTopicsLocal if not.
 
     Args:
         row (pd.Series): The row to process
@@ -694,7 +954,8 @@ def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series:
 
     log.debug(f'entering add_subjectTopics')
 
-    # Create list of subject terms from pipe-separated values in 'Subject Heading'
+    # Create list of subject terms from pipe-separated values 
+    # in 'Subject Heading'
     subject_terms: list[str] = row['Subject Heading'].split('|')
 
     # Iterate through subject terms to find URIs
@@ -718,10 +979,14 @@ def add_subjectTopics(row: pd.Series, uri_dict: dict[str, str]) -> pd.Series:
     log.debug(f'Processed row: {row}')
     return row
 
-def make_name_type_column(row: pd.Series, uri_column: str, authority_column: str) -> pd.Series:
+def make_name_type_column(row: pd.Series, 
+                          uri_column: str, 
+                          authority_column: str
+                          ) -> pd.Series:
     """
     Process a row of a DataFrame to create a new column,
-    populating it with either 'Personal' or 'Corporate' based on an LC API call.
+    populating it with either 'Personal' or 'Corporate' 
+    based on an LC API call.
 
     Args:
         row (pd.Series): The row to process
@@ -760,8 +1025,8 @@ def make_name_type_column(row: pd.Series, uri_column: str, authority_column: str
 
 def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
     """
-    Creates the namePersonCreatorLC and nameCorpCreatorLC columns by handing off to process_row based on the value
-    in the 'Name Type' column.
+    Creates the namePersonCreatorLC and nameCorpCreatorLC columns by 
+    handing off to process_row based on the value in the 'Name Type' column.
 
     Args:
         row (pd.Series): The row to process
@@ -779,20 +1044,25 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
         return row
 
     output_format: list[FormattedOutput] = [
-        FormattedOutput(text=None, column_name='Organization Name_sources', function=None, kwargs=None),
-        FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='URI', function=None, kwargs=None)
+        FormattedOutput(text=None, column_name='Organization Name_sources', 
+                        function=None, kwargs=None),
+        FormattedOutput(text=' ', column_name=None, function=None, 
+                        kwargs=None),
+        FormattedOutput(text=None, column_name='URI', function=None, 
+                        kwargs=None)
     ]
 
     # Check if 'Name Type' is 'Personal'
     if row['Name Type'] == 'Personal':
-        row = process_row(row, 'namePersonCreatorLC', output_format, 'Source', 'LCNAF')
+        row = process_row(row, 'namePersonCreatorLC', output_format, 
+                          'Source', 'LCNAF')
         row['nameCorpCreatorLC'] = ''
         return row
 
     # Check if 'Name Type' is 'Corporate'
     if row['Name Type'] == 'Corporate':
-        row = process_row(row, 'nameCorpCreatorLC', output_format, 'Source', 'LCNAF')
+        row = process_row(row, 'nameCorpCreatorLC', output_format, 
+                          'Source', 'LCNAF')
         row['namePersonCreatorLC'] = ''
         return row
 
@@ -806,7 +1076,8 @@ def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('fmp_file', help='The path to the input CSV file')
-    parser.add_argument('student_file', help='The path to the "student spreadsheet" CSV file')
+    parser.add_argument('student_file', help='The path to the '
+                        '"student spreadsheet" CSV file')
     parser.add_argument('output_file', help='''The path to the output CSV file. 
                         Will be created if it does not exist. Will overwrite if
                          it does. Default is ../output/processed_data.csv''',
@@ -816,8 +1087,6 @@ def main():
 
     # Set up tqdm.pandas() to use progress_apply
     tqdm.pandas()
-
-
 
     # Read the CSV files
     fmp_df: pd.DataFrame = read_csv(args.fmp_file)
@@ -833,13 +1102,27 @@ def main():
     print(student_df.head())
     print(student_df.info())
 
-    # Replace null values with empty strings
-    student_df = student_df.fillna('')
+    print('Before groupby')
+    print(student_df.head(50))
 
-    # Use groupby to concatenate the values in each column for each HH ID
-    student_df = student_df.groupby('ss_HH ID').agg(lambda x: '|'.join(x))
+    # Use groupby to combine the values in each column for each HH ID
+    # Each column needs to be combined in a different way
+    aggregation_functions = {
+        'ss_Number of Folders': sum_folders,
+        'ss_DateText': get_min_max_dates,
+        'ss_Box Numbers': compile_box_numbers
+    }
+    student_df = (student_df.groupby('ss_HH ID').
+                  aggregate(aggregation_functions).reset_index())
     
-    print(student_df.head())
+    print('After groupby')
+    print(student_df.head(50))
+
+    # Create the 'Start Date' and 'End Date' columns
+    student_df = student_df.apply(create_start_end_date, axis=1)
+
+    print('After create_start_end_date')
+    print(student_df.head(50))
 
     sys.exit()
 
