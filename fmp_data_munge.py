@@ -332,7 +332,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
         log.warning(f'Rows with non-numeric ss_Number of Folders: '
                     f'{len(non_numeric_folders)}')
         # Use red text to make the warning stand out
-        print(f'{red_warning}: Rows with non-numeric ss_Number of Folders:')
+        print(f'{red_warning}: Rows with non-numeric Number of Folders:')
         print(f'HH ID\t\t# of folders')
         if len(non_numeric_folders) <= 10:
             for i, row in non_numeric_folders.iterrows():
@@ -361,7 +361,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     if not likely_years.empty:
         log.warning(f'Rows with likely years in ss_Number of Folders: '
                     f'{len(likely_years)}')
-        print(f'{red_warning}: Rows with likely years in ss_Number of Folders:')
+        print(f'{red_warning}: Rows with likely years in Number of Folders:')
         print(f'HH ID\t# of folders')
         for i, row in likely_years.iterrows():
             print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}')
@@ -375,7 +375,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     if not likely_dates.empty:
         log.warning(f'Rows with likely dates in ss_Box Numbers: '
                     f'{len(likely_dates)}')
-        print(f'{red_warning}: Rows with likely dates in ss_Box Numbers:')
+        print(f'{red_warning}: Rows with likely dates in Box Numbers:')
         print(f'HH ID\tPERMANENT BOX NUMBER(S)')
         for i, row in likely_dates.iterrows():
             print(f'{row["ss_HH ID"]}\t{row["ss_Box Numbers"]}')
@@ -545,8 +545,7 @@ def create_start_end_date(row: pd.Series) -> pd.Series:
 def get_roles(role_values: str) -> str:
     """
     Replace commas with `&&` in the roles string. Outputs values without
-    spaces regardless of input. Also handles cases where the input includes
-    `, and` instead of just `,`
+    spaces regardless of input. Also handles cases with `and` and `/`.
 
     Args:
         role_values (str): The roles string
@@ -562,7 +561,9 @@ def get_roles(role_values: str) -> str:
         output: 'author&&editor'
     """
 
-    values = role_values.replace(', and', ',')
+    values = role_values.replace('/', ',')
+    values = values.replace(', and', ',')
+    values = values.replace(' and ', ',')
     values = values.split(',')
     return '&&'.join([value.strip() for value in values])
 
