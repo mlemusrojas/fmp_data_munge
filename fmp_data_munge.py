@@ -332,7 +332,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
         log.warning(f'Rows with non-numeric ss_Number of Folders: '
                     f'{len(non_numeric_folders)}')
         # Use red text to make the warning stand out
-        print(f'{red_warning}: Rows with non-numeric ss_Number of Folders:')
+        print(f'{red_warning}: Rows with non-numeric Number of Folders:')
         print(f'HH ID\t\t# of folders')
         if len(non_numeric_folders) <= 10:
             for i, row in non_numeric_folders.iterrows():
@@ -361,7 +361,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     if not likely_years.empty:
         log.warning(f'Rows with likely years in ss_Number of Folders: '
                     f'{len(likely_years)}')
-        print(f'{red_warning}: Rows with likely years in ss_Number of Folders:')
+        print(f'{red_warning}: Rows with likely years in Number of Folders:')
         print(f'HH ID\t# of folders')
         for i, row in likely_years.iterrows():
             print(f'{row["ss_HH ID"]}\t{row["ss_Number of Folders"]}')
@@ -375,7 +375,7 @@ def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) ->
     if not likely_dates.empty:
         log.warning(f'Rows with likely dates in ss_Box Numbers: '
                     f'{len(likely_dates)}')
-        print(f'{red_warning}: Rows with likely dates in ss_Box Numbers:')
+        print(f'{red_warning}: Rows with likely dates in Box Numbers:')
         print(f'HH ID\tPERMANENT BOX NUMBER(S)')
         for i, row in likely_dates.iterrows():
             print(f'{row["ss_HH ID"]}\t{row["ss_Box Numbers"]}')
@@ -541,6 +541,31 @@ def create_start_end_date(row: pd.Series) -> pd.Series:
     row['dateStart'] = start_date
     row['dateEnd'] = end_date
     return row
+
+def get_roles(role_values: str) -> str:
+    """
+    Replace commas with `&&` in the roles string. Outputs values without
+    spaces regardless of input. Also handles cases with `and` and `/`.
+
+    Args:
+        role_values (str): The roles string
+
+    Returns:
+        str: The roles string with commas replaced by `&&`
+
+    Examples:
+        input: 'author, and editor'
+        output: 'author&&editor'
+
+        input: 'author,editor'
+        output: 'author&&editor'
+    """
+
+    values = role_values.replace('/', ',')
+    values = values.replace(', and', ',')
+    values = values.replace(' and ', ',')
+    values = values.split(',')
+    return '&&'.join([value.strip() for value in values])
 
 def create_authority_name(**fields) -> str:
     """
@@ -1117,7 +1142,7 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
 
 #endregion    
         
-#region MAIN FUNCTION
+# MARK: MAIN FUNCTION
 def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
@@ -1195,7 +1220,8 @@ def main():
         FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
                         kwargs={'uri': 'Authority URI'}),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=get_roles, 
+                        kwargs={'role_values': 'Position'}),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name=None, function=build_uri, 
                         kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
@@ -1214,7 +1240,8 @@ def main():
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=get_roles, 
+                        kwargs={'role_values': 'Position'}),
     ]
     new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
@@ -1300,7 +1327,7 @@ def main():
         os.makedirs(output_dir)
     write_csv(new_df, args.output_file)
     print('\033[92m' + 'Done!' + '\033[0m')
-#endregion
+
 
 #region DUNDER MAIN
 if __name__ == '__main__':
