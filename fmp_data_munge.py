@@ -59,23 +59,33 @@ red_warning = '\033[91mWARNING\033[0m'
 @dataclass
 class FormattedOutput:
     """
-    A dataclass 'FormattedOutput' is used to specify how to create a new column in the process_row function.
+    A dataclass 'FormattedOutput' is used to specify how to create a new 
+    column in the process_row function.
 
     Attributes:
-        text (str): The static text to include in the new column. Default is None.
-        column_name (str): The name of an existing column whose values are to be included in the new column. Default is None.
-        function (Callable): A function that returns a string to be included in the new column. Default is None.
-        kwargs (Dict[str, str]): The keyword arguments to pass to the function. Default is None.
+        text (str): The static text to include in the new column. 
+            Default is None.
+        column_name (str): The name of an existing column whose values are 
+            to be included in the new column. Default is None.
+        function (Callable): A function that returns a string to be included 
+            in the new column. Default is None.
+        kwargs (Dict[str, str]): The keyword arguments to pass to the 
+            function. Default is None.
 
-    Any given attribute can be None, but if using a function, the kwargs must be provided.
+    Any given attribute can be None, but if using a function, the kwargs 
+    must be provided.
 
     Examples:
         FormattedOutput can be used in the following ways:
 
         ```
         FormattedOutput(text=',', column_name=None, function=None, kwargs=None)
-        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None)
-        FormattedOutput(text=None, column_name=None, function=create_formatted_date, kwargs={'start_date': 'Start Date', 'end_date': 'End Date'})
+        FormattedOutput(text=None, column_name='Authoritized Name', 
+                        function=None, kwargs=None)
+        FormattedOutput(text=None, column_name=None, 
+                        function=create_formatted_date, 
+                        kwargs={'start_date': 'Start Date', 
+                                'end_date': 'End Date'})
         ```
     """
     text: Optional[str] = None
@@ -88,8 +98,10 @@ class RateLimiter:
     A class to rate limit API calls to different domains
 
     Attributes:
-        rate_limits (Dict[str, float]): A dictionary of rate limits for different domains
-        last_api_call_times (Dict[str, float]): A dictionary of the last time an API call was made to each domain
+        rate_limits (Dict[str, float]): A dictionary of rate limits for 
+            different domains
+        last_api_call_times (Dict[str, float]): A dictionary of the last time 
+            an API call was made to each domain
 
     Example:
         ```
@@ -111,7 +123,8 @@ class RateLimiter:
         rate_limit = self.rate_limits[domain]
         if time_since_last_call < rate_limit:
             rest_time = rate_limit - time_since_last_call
-            log.debug(f'Rate limiting API call to {domain} for {rest_time} seconds')
+            log.debug(f'Rate limiting API call to {domain} for {rest_time} '
+                      f'seconds')
             time.sleep(rest_time)
         self.last_api_call_times[domain] = time.time()
 
@@ -147,7 +160,8 @@ class LocalCache:
                 print(f'''Error loading cache file {self.cache_file},
                       make sure it is a valid JSON file''')
                 log.error(f'Error loading cache file {self.cache_file}')
-                # Ask the user if they want to exit or continue without the cache
+                # Ask the user if they want to exit or continue 
+                # without the cache
                 exit = input('Do you want to proceed without the cache? (y/n) ')
                 if exit.lower() == 'y':
                     return {}
@@ -270,7 +284,8 @@ def remove_orgs(student_df: pd.DataFrame, orgs_file_path: str) -> pd.DataFrame:
 
     return student_df
 
-def clean_student_spreadsheet(df: pd.DataFrame, orgs_file: str | None = None) -> pd.DataFrame:
+def clean_student_spreadsheet(df: pd.DataFrame, 
+                              orgs_file: str | None = None) -> pd.DataFrame:
     """
     Clean the student spreadsheet by removing unnecessary columns and rows
     
@@ -451,9 +466,11 @@ def get_min_max_dates(col_value: pd.Series) -> str:
     # Filter out empty strings
     non_empty_dates: list[str] = [date for date in stripped_dates if date]
     # Filter out values that can't be converted to dates using datetime
-    valid_dates: list[str] = [date for date in non_empty_dates if is_valid_date(date)]
+    valid_dates: list[str] = [date for date in non_empty_dates if 
+                              is_valid_date(date)]
     # Convert the dates to datetime objects
-    date_objects: list[pd.Timestamp] = [pd.to_datetime(date) for date in valid_dates]
+    date_objects: list[pd.Timestamp] = [pd.to_datetime(date) for date in 
+                                        valid_dates]
     if not date_objects:
         return ''
     # Get the min and max dates
@@ -902,9 +919,11 @@ def lc_get_name_type(uri: str) -> str | None:
             log.warning(f'No name types found for {uri}')
             return None
         if "http://www.loc.gov/mads/rdf/v1#CorporateName" in name_types:
-            return lc_name_type_cache.write_and_return_response(uri, 'Corporate')
+            return lc_name_type_cache.write_and_return_response(uri, 
+                                                                'Corporate')
         elif "http://www.loc.gov/mads/rdf/v1#PersonalName" in name_types:
-            return lc_name_type_cache.write_and_return_response(uri, 'Personal')
+            return lc_name_type_cache.write_and_return_response(uri, 
+                                                                'Personal')
     else:
         log.warning(f'LC API call failed for ```{uri}```, '
                     f'{response.status_code = }')
@@ -1215,16 +1234,20 @@ def main():
 
     # Add the namePersonOtherVIAF column MARK: namePersonOtherVIAF
     log.debug(f'Adding the namePersonOtherVIAF column')
-    print('Adding the namePersonOtherVIAF column. This could take a while as it requires an API call for each new VIAF URI.')
+    print('Adding the namePersonOtherVIAF column. This could take a while as '
+          'it requires an API call for each new VIAF URI.')
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
                         kwargs={'uri': 'Authority URI'}),
-        FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=', ', column_name=None, function=None, 
+                        kwargs=None),
         FormattedOutput(text=None, column_name=None, function=get_roles, 
                         kwargs={'role_values': 'Position'}),
-        FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=' ', column_name=None, function=None, 
+                        kwargs=None),
         FormattedOutput(text=None, column_name=None, function=build_uri, 
-                        kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
+                        kwargs={'authority': 'Authority Used', 
+                                'id': 'Authority ID'})
     ]
     new_df: pd.DataFrame = df.progress_apply(process_row, 
                                              args=('namePersonOtherVIAF', 
@@ -1238,16 +1261,25 @@ def main():
     log.debug(f'Adding the namePersonOtherLocal column')
     print('Adding the namePersonOtherLocal column.') 
     output_format: list[FormattedOutput] = [
-        FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
-        FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
+        FormattedOutput(text=None, column_name='Authoritized Name', 
+                        function=None, kwargs=None),
+        FormattedOutput(text=', ', column_name=None, function=None, 
+                        kwargs=None),
         FormattedOutput(text=None, column_name=None, function=get_roles, 
                         kwargs={'role_values': 'Position'}),
     ]
-    new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
+    new_df: pd.DataFrame = new_df.apply(process_row, 
+                                        args=('namePersonOtherLocal', 
+                                              output_format, 
+                                              'Authority Used', 'local'), 
+                                              axis=1)
 
     # Make the nameType column
-    print('Adding the (temporary) Name Type column. This could take a while as it requires an API call for each new LCNAF URI.')
-    new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, args=('URI', 'Source'), axis=1) # type: ignore
+    print('Adding the (temporary) Name Type column. This could take a while '
+          'as it requires an API call for each new LCNAF URI.')
+    new_df: pd.DataFrame = new_df.progress_apply(make_name_type_column, 
+                                                 args=('URI', 'Source'), 
+                                                 axis=1) # type: ignore
     print('Finished adding the Name Type column')
 
     # Add the namePersonCreatorLC and nameCorpCreatorLC columns MARK: namePersonCreatorLC, nameCorpCreatorLC
@@ -1260,13 +1292,20 @@ def main():
     """
     print('Adding the nameCorpCreatorVIAF column.')
     output_format: list[FormattedOutput] = [
-        FormattedOutput(text=None, column_name='Organization Name_sources', function=None, kwargs=None),
-        FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='URI', function=None, kwargs=None)
+        FormattedOutput(text=None, column_name='Organization Name_sources', 
+                        function=None, kwargs=None),
+        FormattedOutput(text=' ', column_name=None, function=None, 
+                        kwargs=None),
+        FormattedOutput(text=None, column_name='URI', function=None, 
+                        kwargs=None)
     ]
-    new_df: pd.DataFrame = new_df.apply(process_row, args=('nameCorpCreatorVIAF', output_format, 'Source', 'VIAF'), axis=1)
+    new_df: pd.DataFrame = new_df.apply(process_row, 
+                                        args=('nameCorpCreatorVIAF', 
+                                              output_format, 'Source', 'VIAF'),
+                                                axis=1)
 
-    # We only want to keep the nameCorpCreatorVIAF column if the nameCorpCreatorLC and namePersonCreatorLC columns are empty
+    # We only want to keep the nameCorpCreatorVIAF column if the 
+    # nameCorpCreatorLC and namePersonCreatorLC columns are empty
     new_df['nameCorpCreatorVIAF'] = new_df.apply(
         lambda row: row['nameCorpCreatorVIAF'] 
         if not row['nameCorpCreatorLC'] 
@@ -1277,27 +1316,32 @@ def main():
 
     # Add the nameCorpCreatorLocal column MARK: nameCorpCreatorLocal
     """
-    nameCorpCreatorLocal (FileMakerPro: sources sheet -> Organization Name, Source)
+    nameCorpCreatorLocal (FileMakerPro: sources sheet -> 
+                                    Organization Name, Source)
         If no LCNAF and no VIAF, find name, pull just one
         If no name is found as Local, add the Organization Name from the 
-        subjects sheet (this will be the same value as in the subjectCorpLocal field)
+        subjects sheet (this will be the same value as in the 
+            subjectCorpLocal field)
         Ex: The Presbyterian Journal
     """
     print('Adding the nameCorpCreatorLocal column.')
     new_df: pd.DataFrame = new_df.apply(add_nameCorpCreatorLocal_column, axis=1)
 
     # Add the subjectTopicsLC and subjectTopicsLocal columns MARK: subjectTopicsLC, subjectTopicsLocal
-    print('Adding subjectTopicsLC and subjectTopicsLocal columns (hitting LC API for each new unique subject term)')
+    print('Adding subjectTopicsLC and subjectTopicsLocal columns '
+          '(hitting LC API for each new unique subject term)')
     unique_subjects = get_unique_values_from_column(new_df['Subject Heading'])
     uri_dict = build_uri_dict(unique_subjects, lc_get_subject_uri)
-    new_df: pd.DataFrame = new_df.apply(add_subjectTopics, args=(uri_dict,), axis=1)
+    new_df: pd.DataFrame = new_df.apply(add_subjectTopics, args=(uri_dict,), 
+                                        axis=1)
     print('Finished adding subjectTopicsLC and subjectTopicsLocal columns')
 
     # Add subjectNamesLC MARK: subjectNamesLC
     """
     (FileMakerPro: sources sheet -> Organization Name, Source, URI)
     """
-    # this will be the same value as in the namePersonCreatorLC field, so we can just copy that value
+    # this will be the same value as in the namePersonCreatorLC field, 
+    # so we can just copy that value
     print('Adding subjectNamesLC column')
     new_df['subjectNamesLC'] = new_df['namePersonCreatorLC']
 
@@ -1305,7 +1349,8 @@ def main():
     """
     (FileMakerPro: sources sheet -> Organization Name, Source, URI)
     """
-    # this will be the same value as in the nameCorpCreatorLC field, so we can just copy that value
+    # this will be the same value as in the nameCorpCreatorLC field, so we 
+    # can just copy that value
     print('Adding subjectCorpLC column')
     new_df['subjectCorpLC'] = new_df['nameCorpCreatorLC']
 
@@ -1313,7 +1358,8 @@ def main():
     """
     (FileMakerPro: sources sheet -> Organization Name, Source, URI)
     """
-    # this will be the same value as in the nameCorpCreatorVIAF field, so we can just copy that value
+    # this will be the same value as in the nameCorpCreatorVIAF field, 
+    # so we can just copy that value
     print('Adding subjectCorpVIAF column')
     new_df['subjectCorpVIAF'] = new_df['nameCorpCreatorVIAF']
 
