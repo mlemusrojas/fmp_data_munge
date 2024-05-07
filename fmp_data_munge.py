@@ -542,6 +542,30 @@ def create_start_end_date(row: pd.Series) -> pd.Series:
     row['dateEnd'] = end_date
     return row
 
+def get_roles(role_values: str) -> str:
+    """
+    Replace commas with `&&` in the roles string. Outputs values without
+    spaces regardless of input. Also handles cases where the input includes
+    `, and` instead of just `,`
+
+    Args:
+        role_values (str): The roles string
+
+    Returns:
+        str: The roles string with commas replaced by `&&`
+
+    Examples:
+        input: 'author, and editor'
+        output: 'author&&editor'
+
+        input: 'author,editor'
+        output: 'author&&editor'
+    """
+
+    values = role_values.replace(', and', ',')
+    values = values.split(',')
+    return '&&'.join([value.strip() for value in values])
+
 def create_authority_name(**fields) -> str:
     """
     Create an 'authority' name from the name, date, role, and URI
@@ -1117,7 +1141,7 @@ def handle_person_and_corp_lc_names(row: pd.Series) -> pd.Series:
 
 #endregion    
         
-#region MAIN FUNCTION
+# MARK: MAIN FUNCTION
 def main():
     # Process command line arguments using argparse
     parser = argparse.ArgumentParser()
@@ -1195,7 +1219,8 @@ def main():
         FormattedOutput(text=None, column_name=None, function=get_viaf_name, 
                         kwargs={'uri': 'Authority URI'}),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=get_roles, 
+                        kwargs={'role_values': 'Position'}),
         FormattedOutput(text=' ', column_name=None, function=None, kwargs=None),
         FormattedOutput(text=None, column_name=None, function=build_uri, 
                         kwargs={'authority': 'Authority Used', 'id': 'Authority ID'})
@@ -1214,7 +1239,8 @@ def main():
     output_format: list[FormattedOutput] = [
         FormattedOutput(text=None, column_name='Authoritized Name', function=None, kwargs=None),
         FormattedOutput(text=', ', column_name=None, function=None, kwargs=None),
-        FormattedOutput(text=None, column_name='Position', function=None, kwargs=None),
+        FormattedOutput(text=None, column_name=None, function=get_roles, 
+                        kwargs={'role_values': 'Position'}),
     ]
     new_df: pd.DataFrame = new_df.apply(process_row, args=('namePersonOtherLocal', output_format, 'Authority Used', 'local'), axis=1)
 
@@ -1300,7 +1326,7 @@ def main():
         os.makedirs(output_dir)
     write_csv(new_df, args.output_file)
     print('\033[92m' + 'Done!' + '\033[0m')
-#endregion
+
 
 #region DUNDER MAIN
 if __name__ == '__main__':
