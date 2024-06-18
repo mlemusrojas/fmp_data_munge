@@ -524,9 +524,13 @@ def compile_box_numbers(col_value: pd.Series) -> str:
     # Sort the box numbers
     part_1.sort()
     part_2.sort()
+    # Remove duplicates
+    part_1_set: set[str] = set(part_1)
+    part_2_set: set[str] = set(part_2)
     # Format the box numbers
-    part_1_str: str = f'Part 1: {", ".join(part_1)}' if part_1 else ''
-    part_2_str: str = f'Part 2: {", ".join(part_2)}' if part_2 else ''
+    part_1_str: str = f'Part 1: {", ".join(part_1_set)}' if part_1_set else ''
+    part_2_str: str = f'Part 2: {", ".join(part_2_set)}' if part_2_set else ''
+    # Combine the parts if neither are empty
     if part_1_str and part_2_str:
         return f'{part_1_str}; {part_2_str}'
     # Return whichever part is not empty, or an empty string if both are empty
@@ -948,7 +952,9 @@ def get_viaf_name(uri: str) -> str:
 
     # Check the local cache
     if uri in viaf_name_cache:
-        return viaf_name_cache[uri]
+        # Remove the '....' if they are present
+        name = viaf_name_cache[uri].replace('....', '')
+        return name
 
     # Limit the rate of API calls if necessary
     rate_limiter.rate_limit_api_call('viaf')
@@ -987,6 +993,8 @@ def get_viaf_name(uri: str) -> str:
         if 'LC' in sources['s']:
             name = d.get('text', None)
             if name:
+                # Remove the '....' if they are present
+                name = name.replace('....', '')
                 return viaf_name_cache.write_and_return_response(uri, name)
             
     log.warning(f'Unable to find name for ``{uri}``')
