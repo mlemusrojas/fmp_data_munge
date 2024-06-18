@@ -26,20 +26,20 @@ This script takes a csv spreadsheet of FileMaker Pro data and adds new columns t
     pip install -r requirements.txt
     ```
 
-    ## Usage
-    1. If you have not already done so, activate the virtual environment (if you created one):
-        ```shell
-        source [virtual environment name]/bin/activate
-        ```
-    2. Run the script using the following command:
-        ```shell
-        python fmp_data_munge.py [fmp_file] [student_file] [output_file] [orgs_file]
-        ```
-        The `fmp_file` is the path to the input CSV file. The `student_file` is the path to the "student spreadsheet" CSV file. The `output_file` is the path to the output CSV file. The output file will be created if it does not exist and will be overwritten if it does. The default output file path is `../output/processed_data.csv`. The `orgs_file` is the path to the txt file containing the list of organizations to include. If `orgs_file` is not provided, all organizations will be included. If there are spaces in any file path, enclose the path in quotes.
+## Usage
+1. If you have not already done so, activate the virtual environment (if you created one):
+    ```shell
+    source [virtual environment name]/bin/activate
+    ```
+2. Run the script using the following command:
+    ```shell
+    python fmp_data_munge.py [fmp_file] [student_file] [output_file] [orgs_file]
+    ```
+    The `fmp_file` is the path to the input CSV file. The `student_file` is the path to the "student spreadsheet" CSV file. The `output_file` is the path to the output CSV file. The output file will be created if it does not exist and will be overwritten if it does. The default output file path is `../output/processed_data.csv`. The `orgs_file` is the path to the txt file containing the list of organizations to include. If `orgs_file` is not provided, all organizations will be included. If there are spaces in any file path, enclose the path in quotes.
 
-        example:
-        ```shell
-        python fmp_data_munge.py "My Files/fmp_data.csv" "My Files/student_data.csv" "My Files/output_data.csv" "My Files/orgs.txt"
+    example:
+    ```shell
+    python fmp_data_munge.py "My Files/fmp_data.csv" "My Files/student_data.csv" "My Files/output_data.csv" "My Files/orgs.txt"
     ```
 
 ## Contributing
