@@ -910,11 +910,19 @@ def lc_get_name_type(uri: str) -> str | None:
     response = requests.get(f'{uri}.json')
     if response.ok:
         log.debug(f'LC API call successful')
-        data: list[dict[str, Any]] = response.json()
+        try:
+            data: list[dict[str, Any]] = response.json()
+        except Exception as e:
+            log.warning(f'Error parsing JSON: {e}')
+            raise
         # find the dictionary with a key of '@id' and a value of the uri
-        matching_dict: dict[str, Any] = ([d for d in data 
+        try:
+            matching_dict: dict[str, Any] = ([d for d in data 
                                           if d.get('@id', None) == uri][0]
                                           )
+        except IndexError:
+            log.warning(f'No matching dictionary found for {uri}')
+            return None
         log.debug(f'{matching_dict = }')
         # get the values from the '@type' key
         name_types: list[str] = matching_dict.get('@type', None)
