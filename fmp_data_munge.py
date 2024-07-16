@@ -1176,13 +1176,14 @@ def main():
     parser.add_argument('fmp_file', help='The path to the input CSV file')
     parser.add_argument('student_file', help='The path to the '
                         '"student spreadsheet" CSV file')
-    parser.add_argument('output_file', help='''The path to the output CSV file. 
+    parser.add_argument('--output_file', help='''The path to the output CSV file. 
                         Will be created if it does not exist. Will overwrite if
                          it does. Default is ../output/processed_data.csv''',
                         default='../output/processed_data.csv')
-    parser.add_argument('orgs_file', help='The path to the txt file '
+    parser.add_argument('--orgs_file', help='The path to the txt file '
                         'containing the list of organizations to include. If '
-                        'not provided, all organizations will be included.')
+                        'not provided, all organizations will be included.',
+                        default=None)
     args = parser.parse_args()
     log.info(f'successfully parsed args, ``{args}``')
 
