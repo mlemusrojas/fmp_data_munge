@@ -37,9 +37,9 @@ This script takes a csv spreadsheet of FileMaker Pro data and adds new columns t
     ```
     The `fmp_file` is the path to the input CSV file. The `student_file` is the path to the "student spreadsheet" CSV file. The `output_file` is the path to the output CSV file. The output file will be created if it does not exist and will be overwritten if it does. The default output file path is `../output/processed_data.csv`. The `orgs_file` is the path to the txt file containing the list of organizations to include. If `orgs_file` is not provided, all organizations will be included. If there are spaces in any file path, enclose the path in quotes.
 
-    example:
+    ### Example:
     ```shell
-    python fmp_data_munge.py "My Files/fmp_data.csv" "My Files/student_data.csv" "My Files/output_data.csv" "My Files/orgs.txt"
+    python fmp_data_munge.py /path/to/fmp/data.csv /path/to/student/data.csv --output_file /path/to/output/data.csv --orgs_file /path/to/hh/list.txt
     ```
 
 ## Contributing
